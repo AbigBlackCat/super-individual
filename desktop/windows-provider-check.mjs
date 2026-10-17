@@ -23,6 +23,8 @@ const executable=path.join(appDir,'super individual.exe');
 const connectionFile=path.join(home,'mcp/connection.json');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let desktopApp,desktopProcess,connection,route;
+const completedChecks=[];
+const reportFile=path.join(repo,`desktop/validation/windows-real-${engine}.json`);
 const started=Date.now();
 async function api(url,body){const response=await fetch(connection.origin+'/api'+url,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Origin:connection.origin},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const result=await response.json();assert.ok(response.ok,`HTTP ${response.status}`);return result;}
 async function phase(expected){for(let i=0;i<300;i++){const detail=await api(route);if(detail.workflow.phase===expected)return detail;if(detail.workflow.phase==='blocked')throw new Error(`Live ${engine} stage blocked; inspect the isolated instance locally`);await sleep(2000);}throw new Error(`Live provider did not reach ${expected}`);}
@@ -33,27 +35,35 @@ try{
  assert.ok(connection,'Live-provider desktop did not start');
  const engines=await api('/individual/engines?refresh=true');
  assert.ok(engines.some(item=>item.engine===engine&&item.available&&item.loggedIn),'Selected provider is not installed and logged in');
+ completedChecks.push('installed CLI authenticated');
  const company=await api('/companies',{name:'Real provider acceptance'});
  const task=await api(`/individual/${company.id}/tasks`,{title:'Windows real provider verification',description:'只在当前工作目录创建 si-provider-result.txt，内容精确为 SI_WINDOWS_REAL_PROVIDER_OK。计划仅需一个 coding 步骤，不做其他改动。独立审查时读取该文件并检查内容。',coordinator:engine,directory:work,priority:'low'});
  route=`/individual/${company.id}/tasks/${task.id}`;
  await api(route+'/plan',{});
  const planned=await phase('plan_review');assert.ok(!planned.workflow.approvedRevision);
+ completedChecks.push('real model plan');
  assert.equal(planned.workflow.stages.filter(stage=>stage.role==='worker').length,0);
  const page=await desktopApp.firstWindow();await page.reload();
  await page.getByRole('button').filter({has:page.getByRole('heading',{name:task.title,exact:true})}).click();
  await page.getByRole('button',{name:'确认计划并执行'}).click();
+ completedChecks.push('human plan approval through UI');
  const reviewed=await phase('acceptance');
  assert.equal((await fs.readFile(path.join(work,'si-provider-result.txt'),'utf8')).trim(),'SI_WINDOWS_REAL_PROVIDER_OK');
+ completedChecks.push('real worker file output','independent review session');
  assert.notEqual(reviewed.task.status,'done');
  await expect(page.getByRole('button',{name:'验收通过',exact:true}).first()).toBeVisible({timeout:15000});
  await page.getByRole('button',{name:'验收通过',exact:true}).first().click();
  await phase('completed');
+ completedChecks.push('human final acceptance through UI');
  const quit=spawn(executable,['--quit'],{cwd:work,env,stdio:'ignore'});await new Promise(resolve=>quit.once('exit',resolve));
  await expect.poll(async()=>fs.access(connectionFile).then(()=>false,()=>true),{timeout:45000}).toBe(true);
+ completedChecks.push('graceful exit');
  await fs.mkdir(path.join(repo,'desktop/validation'),{recursive:true});
- await fs.writeFile(path.join(repo,`desktop/validation/windows-real-${engine}.json`),JSON.stringify({passed:true,engine,realProvider:true,credentialsBundled:false,elapsedSeconds:Math.round((Date.now()-started)/1000),checks:['installed CLI authenticated','real model plan','human plan approval through UI','real worker file output','independent review session','human final acceptance through UI','graceful exit']},null,2));
+ await fs.writeFile(reportFile,JSON.stringify({passed:true,engine,realProvider:true,credentialsBundled:false,elapsedSeconds:Math.round((Date.now()-started)/1000),checks:completedChecks},null,2));
  console.log(`Live ${engine} planning, execution, review and human acceptance passed`);
 }catch(error){
+ await fs.mkdir(path.dirname(reportFile),{recursive:true});
+ await fs.writeFile(reportFile,JSON.stringify({passed:false,engine,realProvider:true,credentialsBundled:false,elapsedSeconds:Math.round((Date.now()-started)/1000),checksPassed:completedChecks,failure:'Live provider acceptance did not complete; inspect isolated diagnostics locally'},null,2));
  console.error(String(error.stack || error));
  if(connection&&route){
   const detail=await api(route).catch(()=>null);
@@ -63,7 +73,12 @@ try{
 }finally{
  if(desktopProcess?.exitCode===null){
   if(connection&&route)await api(route+'/cancel',{}).catch(()=>{});
-  try {execFileSync('taskkill.exe',['/PID',String(desktopProcess.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});} catch {}
+  try {
+   const quit=spawn(executable,['--quit'],{cwd:work,env,stdio:'ignore'});
+   await new Promise(resolve=>quit.once('exit',resolve));
+   for(let i=0;i<90&&desktopProcess.exitCode===null;i++)await sleep(500);
+  }catch{}
+  if(desktopProcess.exitCode===null)try {execFileSync('taskkill.exe',['/PID',String(desktopProcess.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});} catch {}
  }
  // Provider auth links and copied private CLI configuration belong only to
  // this disposable data home, never to the repository or release artifacts.

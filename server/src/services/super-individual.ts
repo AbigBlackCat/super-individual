@@ -8,7 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { agents, companies, heartbeatRuns, issues, type Db } from "@paperclipai/db";
 import { individualPlanSchema, readIndividualWorkflow, readyIndividualSteps, type IndividualEngine, type IndividualWorkflow, type IndividualStage } from "@paperclipai/shared";
-import { individualStageOverrides, individualClaudeEnvironment } from "./super-individual-policy.js";
+import { individualStageOverrides, individualClaudeEnvironment, individualCodexArguments } from "./super-individual-policy.js";
 import { issueService } from "./issues.js";
 import { documentService } from "./documents.js";
 import { approvalService } from "./approvals.js";
@@ -114,7 +114,7 @@ function createService(db: Db) {
       timeoutSec: 1800,
       ...(engine === "claude"
         ? { dangerouslySkipPermissions: false, extraArgs: ["--permission-mode", role === "worker" ? "acceptEdits" : "plan", "--allowedTools", role === "worker" ? "Read,Write,Edit,Glob,Grep,Bash" : "Read,Glob,Grep", ...(role === "worker" ? [] : ["--tools", "Read,Glob,Grep"])] }
-        : { dangerouslyBypassApprovalsAndSandbox: false, extraArgs: ["--skip-git-repo-check", ...(role === "worker" ? [] : ["--sandbox", "read-only"])] }),
+        : { dangerouslyBypassApprovalsAndSandbox: false, extraArgs: individualCodexArguments(role) }),
       promptTemplate: "{{instructions}}\n{{context.superIndividualPrompt}}",
     };
     if (!agent) {

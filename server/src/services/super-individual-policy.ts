@@ -3,6 +3,14 @@ export function individualStageOverrides(directory: string) {
   return { adapterConfig: { cwd: directory }, useProjectWorkspace: false };
 }
 
+export function individualCodexArguments(role: "planner" | "worker" | "reviewer", platform = process.platform) {
+  return [
+    "--skip-git-repo-check",
+    ...(platform === "win32" ? ["-c", "features.prefer_mxc=true", "-c", 'approval_policy="never"'] : []),
+    ...(role === "worker" ? [] : ["--sandbox", "read-only"]),
+  ];
+}
+
 export function individualClaudeEnvironment(proxy?: string): Record<string, string> {
   // Explicitly setting even the default directory selects a different Claude keychain identity.
   const env: Record<string, string> = {};

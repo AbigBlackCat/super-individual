@@ -12,7 +12,7 @@ if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Bui
 if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Use Node 24 for the packaged backend');
 const desktop = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(desktop);
-const version = process.env.SI_VERSION || '0.1.0';
+const version = process.env.SI_VERSION || '0.1.1';
 if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid SI_VERSION');
 const payload = path.join(desktop, 'payload');
 const staging = path.join(desktop, 'app-source-windows');

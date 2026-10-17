@@ -12,10 +12,12 @@
 
 Claude Code 或 Codex CLI 需要在这台 Windows 电脑上另行安装并完成官方登录。应用复用用户本机 CLI 及已有登录，不携带或迁移任何凭据。CLI 安装和登录入口见应用“设置”及仓库 README。模型调用仍需网络和对应账户权限。普通 Windows 账户使用 Codex 时，CLI 登录目录与 SI 数据目录需位于同一磁盘卷；应用以硬链接复用登录文件，不复制刷新凭据。跨卷且没有文件符号链接权限的配置会报错。
 
+Windows Codex 调用在现有沙箱策略内优先使用 MXC；规划和审查保持只读，执行使用 workspace-write，CLI 不等待扩大权限请求。SI 界面的计划批准和最终验收仍由人完成。建议使用支持 MXC 的较新 Codex CLI；本机真实验证版本为 0.163.0-alpha.10.2。设备或策略不支持 MXC 时，Codex 使用已允许的后备实现；必要的沙箱初始化按 [OpenAI 官方 Windows 指南](https://learn.chatgpt.com/docs/windows/windows-sandbox) 完成。
+
 可以用 PowerShell 验证下载完整性：
 
 ```powershell
-Get-FileHash .\si-windows-x64-v0.1.0.zip -Algorithm SHA256
+Get-FileHash .\si-windows-x64-v0.1.1.zip -Algorithm SHA256
 ```
 
 将结果与 Release 附带的 `SHA256SUMS.txt` 比较。

@@ -4,7 +4,7 @@ on:
     inputs:
       version:
         description: Release version
-        default: '0.1.0'
+        default: '0.1.1'
         required: true
 permissions:
   contents: read
@@ -76,7 +76,7 @@ jobs:
           Compress-Archive -Path 'desktop/out/super individual-win32-x64/*' -DestinationPath $zip -CompressionLevel Optimal
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $zip" | Out-File -Encoding ascii SHA256SUMS.txt
-          Copy-Item -LiteralPath 'desktop/WINDOWS-使用说明.md' -Destination 'Windows-使用说明.md'
+          Copy-Item -LiteralPath 'desktop/WINDOWS-使用说明.md' -Destination 'Windows-Quickstart.md'
       - uses: actions/upload-artifact@v4
         with:
           name: si-windows-release
@@ -84,7 +84,7 @@ jobs:
             si-windows-x64-*.zip
             SHA256SUMS.txt
             desktop/validation/windows-smoke.json
-            Windows-使用说明.md
+            Windows-Quickstart.md
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -128,7 +128,7 @@ jobs:
           [[ "$SI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           ZIP=$(find release -name '*.zip' -print -quit)
           SUM=$(find release -name SHA256SUMS.txt -print -quit)
-          GUIDE=$(find release -name 'Windows-使用说明.md' -print -quit)
+          GUIDE=$(find release -name 'Windows-Quickstart.md' -print -quit)
           REPORT=$(find release -name 'windows-smoke.json' -print -quit)
           cat > notes.txt <<'NOTES'
           Windows x64 便携版：解压完整 ZIP 后双击 `super individual.exe`。

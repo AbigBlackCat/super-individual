@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { individualPlanSchema, readyIndividualSteps, type IndividualWorkflow } from "@paperclipai/shared";
-import { individualStageOverrides, individualClaudeEnvironment } from "./super-individual-policy.js";
+import { individualStageOverrides, individualClaudeEnvironment, individualCodexArguments } from "./super-individual-policy.js";
 import { parseIssueAssigneeAdapterOverrides } from "./execution-workspace-policy.js";
 const step = (key: string, dependsOn: string[] = []) => ({ key, title: key, description: key, kind: "coding" as const, dependsOn });
 const plan = { summary: "计划", acceptance: "文件正确", steps: [step("a"), step("b", ["a"])] };
 const workflow: IndividualWorkflow = { version: 1, coordinator: "claude", directory: "/tmp", phase: "executing", plan, planRevision: "v1", approvedRevision: "v1", stages: [], reviewRound: 0 };
 describe("super individual execution gate", () => {
+  it("keeps read-only roles and workspace worker boundaries with headless Windows Codex", () => {
+    for (const role of ["planner", "worker", "reviewer"] as const) {
+      const args = individualCodexArguments(role, "win32");
+      expect(args).toContain("features.prefer_mxc=true");
+      expect(args).toContain('approval_policy="never"');
+      expect(args.includes("read-only")).toBe(role !== "worker");
+      expect(args.join(" ")).not.toMatch(/danger-full-access|bypass|yolo/);
+      expect(individualCodexArguments(role, "darwin")).not.toContain("features.prefer_mxc=true");
+    }
+  });
   it("applies only an explicitly configured HTTP proxy to Claude", () => {
     expect(individualClaudeEnvironment()).toEqual({});
     expect(individualClaudeEnvironment("http://127.0.0.1:7897")).toEqual({ HTTP_PROXY: "http://127.0.0.1:7897", HTTPS_PROXY: "http://127.0.0.1:7897", ALL_PROXY: "http://127.0.0.1:7897" });
