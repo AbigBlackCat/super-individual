@@ -110,3 +110,6 @@ test-results/
 *.env.*
 !.env.example
 !.env.runner-e2e.example
+
+# Temporary Windows deployment manifest backup
+package.json.si-build-backup

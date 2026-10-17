@@ -4,9 +4,13 @@
 
 **创建任务 → 选择 Claude / Codex 总控 → 生成计划 → 人工确认 → 执行与独立审查 → 人工验收。**
 
+## 当前交付状态
+
+Windows 源码交接已提供，桌面包尚在修复首次启动问题。Windows 接手开发请先阅读 [WINDOWS-HANDOFF.md](WINDOWS-HANDOFF.md)。
+
 ## 下载
 
-Windows x64 便携包发布于 [Releases](https://github.com/AbigBlackCat/super-individual/releases)。解压完整文件夹后双击 `super individual.exe`，不需要安装 Node、pnpm 或 Rust。下载包内不含任何用户数据、密钥或 CLI 登录凭据。
+源码交接包及未来通过验证的 Windows x64 便携包发布于 [Releases](https://github.com/AbigBlackCat/super-individual/releases)。解压完整文件夹后双击 `super individual.exe`，不需要安装 Node、pnpm 或 Rust。下载包内不含任何用户数据、密钥或 CLI 登录凭据。
 
 Windows 首次启动创建自己的工作区；数据保存在 `%APPDATA%\super individual`。Claude Code 与 Codex CLI 需要在本机安装、登录，模型服务仍需联网。Mac 本机版本的开发说明见 [desktop/README.md](desktop/README.md)。
 
