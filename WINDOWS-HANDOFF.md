@@ -18,8 +18,8 @@ https://github.com/AbigBlackCat/super-individual/actions/runs/39037842818
 
 ## Windows 电脑需要准备
 
-1. Windows x64、Git for Windows（含 Git Bash）。
-2. Node.js 24；构建环境使用过 **24.19.0**。
+1. Windows x64、[Git for Windows](https://gitforwindows.org/)（含 Git Bash）。
+2. [Node.js 24](https://nodejs.org/en/download)；构建环境使用过 **24.19.0**。
 3. pnpm **9.15.4**。不要直接升级到 pnpm 11。
 4. Claude Code 或 Codex CLI：在 Windows 单独安装并登录。无需迁移 Mac 的令牌或配置。
 
@@ -103,3 +103,7 @@ node desktop/payload/launch.mjs
 保持 `/api`、任务 ID、状态枚举和内部 `companyId` 模型。计划必须由人批准，根任务必须由人验收；MCP 仅支持读任务、创建草稿和回传未审查结果。
 
 正式桌面数据位于 `%APPDATA%\super individual`。不要把数据库、`.env`、`secrets`、`mcp/connection.json` 或 CLI 凭据提交到 GitHub。Git 仓库和本次 ZIP 均不包含这些个人数据；原 Paperclip MIT 许可证与署名保留。
+
+## 给 Windows 编程助手的接手提示
+
+> 请先阅读 WINDOWS-HANDOFF.md。当前 Windows x64 编译和 23 项检查已通过，Electron 已能打包，但首次启动后端未就绪。先运行生产后端检查并取得具体错误日志，修复 Windows 启动，再运行桌面冒烟测试和 GitHub 发布流程。保留现有 API、审批与人工验收边界，不迁移或上传任何个人凭据和数据库，不重写调度系统。
