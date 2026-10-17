@@ -3,37 +3,47 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { availablePort } from './runtime.mjs';
+import { fileURLToPath } from 'node:url';
+import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
 
 // Exercise the shipped Node, imports and PostgreSQL before copying the large Electron bundle.
 export async function checkWindowsBackend(payload) {
+  payload = path.resolve(payload);
+  const diagnostics = fileURLToPath(new URL('./validation/', import.meta.url));
+  await fs.mkdir(diagnostics, { recursive: true });
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'si-production-check-'));
+  const startedAt = Date.now();
   const port = await availablePort(0);
   const child = spawn(path.join(payload, 'bin/node.exe'), [path.join(payload, 'launch.mjs')], {
     cwd: home, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: { ...process.env, SUPER_INDIVIDUAL: 'true', PAPERCLIP_HOME: home,
-      PAPERCLIP_CONFIG: path.join(home, 'instances/default/config.json'), PAPERCLIP_INSTANCE_ID: 'default',
-      HOST: '127.0.0.1', PORT: String(port), SERVE_UI: 'true', PAPERCLIP_UI_DEV_MIDDLEWARE: 'false' },
+    env: validationEnvironment(home, { PORT: String(port) }),
   });
   let output = '';
   const record = chunk => { output += chunk.toString(); };
   child.stdout.on('data', record); child.stderr.on('data', record);
+  let launchError;
+  child.once('error', error => { launchError = error; output += error.stack ?? String(error); });
   const exited = new Promise(resolve => { child.once('exit', resolve); child.once('error', resolve); });
+  const closed = new Promise(resolve => child.once('close', resolve));
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   try {
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 300; i++) {
+      if (launchError) throw launchError;
       if (child.exitCode !== null) throw new Error(`Production backend exited: ${child.exitCode}`);
       try { if ((await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) })).ok) {
-        console.log('Production Windows backend and PostgreSQL started successfully'); return;
+        console.log(`Production Windows backend and PostgreSQL started successfully (${Math.round((Date.now() - startedAt) / 1000)}s)`); return;
       } } catch {}
       await sleep(1000);
     }
     throw new Error('Production Windows backend startup timed out');
   } catch (error) {
-    console.error(output.slice(-40000)); throw error;
+    console.error(redactValidationLog(output).slice(-40000)); throw error;
   } finally {
     if (child.connected) child.send({ type: 'si:shutdown' });
     await Promise.race([exited, sleep(15000)]);
-    if (child.exitCode === null) execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
+    if (child.pid && child.exitCode === null && !launchError) execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
+    await Promise.race([closed, sleep(3000)]);
+    await fs.writeFile(path.join(diagnostics, 'windows-smoke-production-backend.log'), redactValidationLog(output));
     await fs.rm(home, { recursive: true, force: true }).catch(() => {});
   }
 }

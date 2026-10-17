@@ -1,15 +1,36 @@
 import path from 'node:path';
-import { access, cp, mkdir, readFile, writeFile, readdir, realpath, stat, rename, rm } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, writeFile, readdir, realpath, stat, rename, rm, lstat, unlink, symlink } from 'node:fs/promises';
 import net from 'node:net';
 import { readFileSync, unlinkSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import os from 'node:os';
 
 export function desktopDataDirectory(platform = process.platform, env = process.env, home = os.homedir()) {
+  if (env.SI_DATA_DIRECTORY) {
+    const paths = platform === 'win32' ? path.win32 : path;
+    if (!paths.isAbsolute(env.SI_DATA_DIRECTORY)) throw new Error('SI_DATA_DIRECTORY must be an absolute path');
+    return paths.normalize(env.SI_DATA_DIRECTORY);
+  }
   if (platform === 'win32') return path.win32.join(env.APPDATA || path.win32.join(home, 'AppData', 'Roaming'), 'super individual');
   return path.join(home, platform === 'darwin' ? 'Library/Application Support' : '.config', 'super individual');
 }
 export function desktopBinary(name, platform = process.platform) { return name + (platform === 'win32' ? '.exe' : ''); }
+export async function prepareWindowsPostgres(resources, home) {
+  const native = path.join(resources, 'server/node_modules/@embedded-postgres/windows-x64/native');
+  if (!/[^\x00-\x7f]/.test(native)) return native;
+  const directory = path.join(home, 'runtime');
+  if (/[^\x00-\x7f]/.test(directory)) throw new Error('PostgreSQL 需要英文运行路径：请使用纯英文的 Windows 用户目录和数据目录。');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const alias = path.join(directory, 'postgres');
+  const existing = await lstat(alias).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  if (existing) {
+    if (!existing.isSymbolicLink()) throw new Error('PostgreSQL runtime alias is not a junction');
+    if (await realpath(alias).catch(() => null) === await realpath(native)) return alias;
+    await unlink(alias);
+  }
+  await symlink(native, alias, 'junction');
+  return alias;
+}
 export function desktopSearchPath(resources, platform = process.platform, env = process.env, home = os.homedir()) {
   const paths = platform === 'win32' ? path.win32 : path;
   const extras = platform === 'win32'

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, realpath } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { availablePort, relocateConfig, migrateLegacyData, safeOpenPath, acquireRuntimeLock } from './runtime.mjs';
+import { availablePort, relocateConfig, migrateLegacyData, safeOpenPath, acquireRuntimeLock, prepareWindowsPostgres } from './runtime.mjs';
 test('port conflict selects an available loopback port', async () => {
   const listener = net.createServer(); await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
   try { assert.notEqual(await availablePort(listener.address().port), listener.address().port); } finally { listener.close(); }
@@ -62,4 +62,22 @@ test('backend lock prevents two services and recovers after a stale process', as
     assert.equal(JSON.parse(await readFile(file, 'utf8')).pid, process.pid);
     recovered();
   } finally { await rm(dir, { recursive: true }); }
+});
+
+test('Windows PostgreSQL alias supports a Chinese portable directory and refreshes after moving it', { skip: process.platform !== 'win32' }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'si-native-path-'));
+  try {
+    const first = path.join(dir, '中文软件'), second = path.join(dir, '中文新位置');
+    const suffix = 'server/node_modules/@embedded-postgres/windows-x64/native';
+    await mkdir(path.join(first, suffix), {recursive:true});
+    await mkdir(path.join(second, suffix), {recursive:true});
+    const home = path.join(dir, 'data');
+    const alias = await prepareWindowsPostgres(first, home);
+    assert.ok(!/[^\x00-\x7f]/.test(alias));
+    assert.equal(await realpath(alias), await realpath(path.join(first, suffix)));
+    assert.equal(await prepareWindowsPostgres(first, home), alias);
+    assert.equal(await prepareWindowsPostgres(second, home), alias);
+    assert.equal(await realpath(alias), await realpath(path.join(second, suffix)));
+    await assert.rejects(prepareWindowsPostgres(first, path.join(dir, '中文数据')), /英文/);
+  } finally { await rm(dir, {recursive:true,force:true}); }
 });

@@ -15,6 +15,7 @@ jobs:
     env:
       NPM_CONFIG_SCRIPT_SHELL: C:\Program Files\Git\bin\bash.exe
       CI: 'true'
+      SI_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,13 +35,15 @@ jobs:
       - name: Runtime checks
         shell: bash
         run: |
-          node --test desktop/platform.test.mjs desktop/runtime.test.mjs desktop/si-mcp.test.mjs
+          node --test desktop/platform.test.mjs desktop/runtime.test.mjs desktop/si-mcp.test.mjs desktop/validation-runtime.test.mjs scripts/link-plugin-dev-sdk.test.js
           pnpm exec vitest run server/src/services/super-individual.test.ts server/src/routes/super-individual-mcp.test.ts packages/adapters/claude-local/src/server/probe-env.test.ts
       - name: Deploy Windows production dependencies
         shell: bash
         run: |
-          # acpx 0.12 belongs to the development graph, not the deployed server.
-          # Keep patch validation enabled for every production dependency.
+          # pnpm 9 hoisted deploy does not apply the bundled acpx 0.12 patch.
+          # SI uses legacy CLI execution; keep all other patch validation enabled.
+          cp package.json package.json.si-build-backup
+          trap 'mv package.json.si-build-backup package.json' EXIT
           node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); delete p.pnpm.patchedDependencies["acpx@0.12.0"]; fs.writeFileSync("package.json",JSON.stringify(p,null,2));'
           pnpm --filter @paperclipai/server --config.node-linker=hoisted deploy --prod desktop/payload/server
       - name: Package application
@@ -61,6 +64,7 @@ jobs:
           Compress-Archive -Path 'desktop/out/super individual-win32-x64/*' -DestinationPath $zip -CompressionLevel Optimal
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $zip" | Out-File -Encoding ascii SHA256SUMS.txt
+          Copy-Item -LiteralPath 'desktop/WINDOWS-使用说明.md' -Destination 'Windows-使用说明.md'
       - uses: actions/upload-artifact@v4
         with:
           name: si-windows-release
@@ -68,6 +72,7 @@ jobs:
             si-windows-x64-*.zip
             SHA256SUMS.txt
             desktop/validation/windows-smoke.json
+            Windows-使用说明.md
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -95,6 +100,8 @@ jobs:
           [[ "$SI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           ZIP=$(find release -name '*.zip' -print -quit)
           SUM=$(find release -name SHA256SUMS.txt -print -quit)
+          GUIDE=$(find release -name 'Windows-使用说明.md' -print -quit)
+          REPORT=$(find release -name 'windows-smoke.json' -print -quit)
           cat > notes.txt <<'NOTES'
           Windows x64 便携版：解压完整 ZIP 后双击 `super individual.exe`。
 
@@ -104,4 +111,4 @@ jobs:
           使用现有 CLI 执行通道，未包含上游只支持 Unix 的原生 Runner。
           此版本未配置商业代码签名。详见仓库中的 Windows 使用说明与验证范围。
           NOTES
-          gh release create "v$SI_VERSION" "$ZIP" "$SUM" --title "super individual $SI_VERSION · Windows x64" --notes-file notes.txt --target "${{ github.sha }}"
+          gh release create "v$SI_VERSION" "$ZIP" "$SUM" "$GUIDE" "$REPORT" --title "super individual $SI_VERSION · Windows x64" --notes-file notes.txt --target "${{ github.sha }}"
