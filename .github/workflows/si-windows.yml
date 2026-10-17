@@ -38,7 +38,11 @@ jobs:
           pnpm exec vitest run server/src/services/super-individual.test.ts server/src/routes/super-individual-mcp.test.ts packages/adapters/claude-local/src/server/probe-env.test.ts
       - name: Deploy Windows production dependencies
         shell: bash
-        run: pnpm --filter @paperclipai/server --config.node-linker=hoisted deploy --prod desktop/payload/server
+        run: |
+          # acpx 0.12 belongs to the development graph, not the deployed server.
+          # Keep patch validation enabled for every production dependency.
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); delete p.pnpm.patchedDependencies["acpx@0.12.0"]; fs.writeFileSync("package.json",JSON.stringify(p,null,2));'
+          pnpm --filter @paperclipai/server --config.node-linker=hoisted deploy --prod desktop/payload/server
       - name: Package application
         shell: bash
         run: |
