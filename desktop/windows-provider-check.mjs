@@ -21,12 +21,13 @@ Object.assign(env,{SI_DATA_DIRECTORY:home,PAPERCLIP_TELEMETRY_DISABLED:'1',NODE_
 const executable=path.join(appDir,'super individual.exe');
 const connectionFile=path.join(home,'mcp/connection.json');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-let desktopApp,connection,route;
+let desktopApp,desktopProcess,connection,route;
 const started=Date.now();
 async function api(url,body){const response=await fetch(connection.origin+'/api'+url,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Origin:connection.origin},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const result=await response.json();assert.ok(response.ok,`HTTP ${response.status}`);return result;}
 async function phase(expected){for(let i=0;i<300;i++){const detail=await api(route);if(detail.workflow.phase===expected)return detail;if(detail.workflow.phase==='blocked')throw new Error(`Live ${engine} stage blocked; inspect the isolated instance locally`);await sleep(2000);}throw new Error(`Live provider did not reach ${expected}`);}
 try{
  desktopApp=await _electron.launch({executablePath:executable,cwd:work,env,timeout:180000});
+ desktopProcess=desktopApp.process();
  for(let i=0;i<360;i++){try{connection=JSON.parse(await fs.readFile(connectionFile,'utf8'));if((await fetch(connection.origin+'/api/health',{signal:AbortSignal.timeout(1000)})).ok)break;connection=null;}catch{}await sleep(1000);}
  assert.ok(connection,'Live-provider desktop did not start');
  const engines=await api('/individual/engines?refresh=true');
@@ -49,11 +50,21 @@ try{
  const quit=spawn(executable,['--quit'],{cwd:work,env,stdio:'ignore'});await new Promise(resolve=>quit.once('exit',resolve));
  await expect.poll(async()=>fs.access(connectionFile).then(()=>false,()=>true),{timeout:45000}).toBe(true);
  await fs.mkdir(path.join(repo,'desktop/validation'),{recursive:true});
- await fs.writeFile(path.join(repo,`desktop/validation/windows-real-${engine}.json`),JSON.stringify({passed:true,engine,realProvider:true,credentialsCopied:false,elapsedSeconds:Math.round((Date.now()-started)/1000),checks:['installed CLI authenticated','real model plan','human plan approval through UI','real worker file output','independent review session','human final acceptance through UI','graceful exit']},null,2));
+ await fs.writeFile(path.join(repo,`desktop/validation/windows-real-${engine}.json`),JSON.stringify({passed:true,engine,realProvider:true,credentialsBundled:false,elapsedSeconds:Math.round((Date.now()-started)/1000),checks:['installed CLI authenticated','real model plan','human plan approval through UI','real worker file output','independent review session','human final acceptance through UI','graceful exit']},null,2));
  console.log(`Live ${engine} planning, execution, review and human acceptance passed`);
-}finally{
- if(desktopApp?.process().exitCode===null){
-  if(connection&&route)await api(route+'/cancel',{}).catch(()=>{});
-  execFileSync('taskkill.exe',['/PID',String(desktopApp.process().pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});
+}catch(error){
+ console.error(String(error.stack || error));
+ if(connection&&route){
+  const detail=await api(route).catch(()=>null);
+  if(detail)console.error(JSON.stringify({phase:detail.workflow.phase,error:detail.workflow.error,runs:detail.runs.map(run=>({status:run.status,error:run.error}))}).replace(/https?:\/\/[^\s"\\]+/g,'[endpoint redacted]'));
  }
+ throw error;
+}finally{
+ if(desktopProcess?.exitCode===null){
+  if(connection&&route)await api(route+'/cancel',{}).catch(()=>{});
+  try {execFileSync('taskkill.exe',['/PID',String(desktopProcess.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});} catch {}
+ }
+ // Provider auth links and copied private CLI configuration belong only to
+ // this disposable data home, never to the repository or release artifacts.
+ await fs.rm(home,{recursive:true,force:true}).catch(()=>{});
 }

@@ -45,7 +45,7 @@ async function start() {
   const log = fs.openSync(path.join(dataDirectory, 'logs/desktop-backend.log'), 'a', 0o600);
   const inheritedPath = runtime.desktopSearchPath(resources);
   backend = spawn(path.join(resources, 'bin', runtime.desktopBinary('node')), [path.join(resources, 'launch.mjs')], {
-    cwd: resources, env: { ...process.env, PATH: inheritedPath, SUPER_INDIVIDUAL: 'true', SUPER_INDIVIDUAL_MCP_TOKEN: mcpToken, PAPERCLIP_HOME: dataDirectory, PAPERCLIP_CONFIG: path.join(dataDirectory, 'instances/default/config.json'), PAPERCLIP_INSTANCE_ID: 'default', HOST: '127.0.0.1', PORT: String(port), SERVE_UI: 'true', PAPERCLIP_UI_DEV_MIDDLEWARE: 'false', PAPERCLIP_MIGRATION_AUTO_APPLY: 'true', ...(process.platform === 'win32' ? {} : { PAPERCLIP_RUNNER_BINARY: path.join(resources, 'runner/paperclip-runnerd') }) }, stdio: ['ignore', log, log, 'ipc'], detached: process.platform !== 'win32', windowsHide: true,
+    cwd: resources, env: { ...process.env, NODE_ENV: 'production', PATH: inheritedPath, SUPER_INDIVIDUAL: 'true', SUPER_INDIVIDUAL_MCP_TOKEN: mcpToken, PAPERCLIP_HOME: dataDirectory, PAPERCLIP_CONFIG: path.join(dataDirectory, 'instances/default/config.json'), PAPERCLIP_INSTANCE_ID: 'default', HOST: '127.0.0.1', PORT: String(port), SERVE_UI: 'true', PAPERCLIP_UI_DEV_MIDDLEWARE: 'false', PAPERCLIP_MIGRATION_AUTO_APPLY: 'true', ...(process.platform === 'win32' ? {} : { PAPERCLIP_RUNNER_BINARY: path.join(resources, 'runner/paperclip-runnerd') }) }, stdio: ['ignore', log, log, 'ipc'], detached: process.platform !== 'win32', windowsHide: true,
   });
   fs.closeSync(log);
   let launchError;

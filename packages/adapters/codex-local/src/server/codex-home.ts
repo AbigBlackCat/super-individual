@@ -4,6 +4,7 @@ import path from "node:path";
 import type { AdapterExecutionContext } from "@paperclipai/adapter-utils";
 import { resolvePaperclipInstanceRootForAdapter } from "@paperclipai/adapter-utils/server-utils";
 import { isCodexAuthCachePath, readSubscriptionAccountId } from "./codex-auth-cache.js";
+import { createWindowsAuthLink, isSameWindowsAuthFile, reconcileWindowsAuthLink, clearWindowsAuthLinkMarker } from "./windows-auth-link.js";
 
 const TRUTHY_ENV_RE = /^(1|true|yes|on)$/i;
 const COPIED_SHARED_FILES = ["config.json", "config.toml", "instructions.md"] as const;
@@ -199,6 +200,7 @@ async function ensureParentDir(target: string): Promise<void> {
 
 async function isExpectedSymlink(target: string, source: string): Promise<boolean> {
   const existing = await fs.lstat(target).catch(() => null);
+  if (existing?.isFile() && await isSameWindowsAuthFile(target, source)) return true;
   if (!existing?.isSymbolicLink()) return false;
 
   const linkedPath = await fs.readlink(target).catch(() => null);
@@ -212,6 +214,13 @@ async function createExpectedSymlink(target: string, source: string): Promise<vo
     await fs.symlink(source, target);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform === "win32" && ["EPERM", "EACCES", "ENOTSUP"].includes(code ?? "")) {
+      try { await createWindowsAuthLink(target, source); return; }
+      catch (linkError) {
+        if ((linkError as NodeJS.ErrnoException).code === "EEXIST" && await isExpectedSymlink(target, source)) return;
+        throw linkError;
+      }
+    }
     if (code === "EEXIST" && await isExpectedSymlink(target, source)) return;
     throw error;
   }
@@ -226,6 +235,7 @@ export async function ensureSymlink(target: string, source: string): Promise<voi
   }
 
   if (!existing.isSymbolicLink()) {
+    if (await isSameWindowsAuthFile(target, source)) return;
     // A previous Paperclip version copied this file into the managed home
     // instead of symlinking it. Codex refresh tokens rotate and are
     // single-use, so a stale copy fails with refresh_token_reused on the next
@@ -358,6 +368,7 @@ export async function writeApiKeyAuthJson(home: string, apiKey: string): Promise
   await fs.mkdir(home, { recursive: true });
   const target = path.join(home, "auth.json");
   await fs.rm(target, { force: true });
+  await clearWindowsAuthLinkMarker(target);
   await fs.writeFile(target, JSON.stringify({ OPENAI_API_KEY: apiKey }), { mode: 0o600 });
 }
 
@@ -630,6 +641,7 @@ export async function seedManagedCodexHome(
   const credentialStoreEntry = isCodexAuthCachePath(env, targetHome);
 
   await fs.mkdir(targetHome, { recursive: true });
+  if (seedFromShared && !credentialStoreEntry) await reconcileWindowsAuthLink(path.join(targetHome, "auth.json"), path.join(sourceHome, "auth.json"));
 
   // A regular-file auth.json in the target home is one of two very different
   // things. The device-login promotion writes the company credential as a

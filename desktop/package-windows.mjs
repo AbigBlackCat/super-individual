@@ -46,6 +46,8 @@ async function normalize(dir) {
   }
 }
 await normalize(path.join(payload, 'server'));
+// pnpm's install metadata contains build-machine paths and is not used by Node.
+for (const file of ['node_modules/.modules.yaml', 'node_modules/.pnpm/lock.yaml']) await fs.rm(path.join(payload, 'server', file), { force: true });
 // Use a per-user ASCII junction for PostgreSQL's Windows executable paths.
 // Its initdb subprocess otherwise sends ACP-encoded library paths to a UTF-8
 // database when the portable folder contains Chinese characters.

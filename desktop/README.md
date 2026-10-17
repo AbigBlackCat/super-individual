@@ -43,3 +43,9 @@ node --test desktop/runtime.test.mjs
 从 GitHub Releases 下载便携 ZIP，完整解压后双击 `super individual.exe`。数据位于 `%APPDATA%\super individual`。首次使用需在 Windows 安装 Claude Code 或 Codex CLI 并登录。应用退出和重新打开后保留任务与产出。
 
 工作流 `.github/workflows/si-windows.yml` 在 Windows 上构建、打包并测试实际桌面应用。Windows 版使用现有 CLI 执行通道，不包含仅支持 Unix 的原生 Runner。冒烟测试使用隔离的模拟 CLI，不代表真实模型账户端到端验证。
+
+首次启动会显示准备界面，冷启动可能需要几分钟；Windows 后端启动等待上限为 5 分钟。桌面通过子进程 IPC 获取实际端口，并核对本实例 MCP 能力，避免端口竞争时误连另一实例。PostgreSQL 在中文软件路径下使用本用户数据目录中的英文目录联接；已验证英文 Windows 用户及数据目录，非 ASCII 用户/数据目录仍有限制。
+
+打包后运行 `node desktop/windows-smoke.mjs`，会复制软件到源码目录之外的中文临时路径，并创建独立数据库和模拟 CLI。检查实际界面的创建、编辑、保存、重启持久化、MCP、审批边界、端口冲突、重复启动和托盘恢复，结果写入 `desktop/validation/windows-smoke.json`。不会使用 `%APPDATA%\super individual` 中的正式数据。可用绝对路径环境变量 `SI_DATA_DIRECTORY` 为桌面和 MCP 指定调试数据目录。
+
+真实模型验收单独执行 `node desktop/windows-provider-check.mjs codex` 或 `claude`。此检查复用用户当前登录的 CLI，使用独立数据库和测试工作目录，经过真实规划、界面确认计划、写入测试文件、独立审查及界面最终验收。它会产生正常模型调用费用，不进入 CI 的模拟 CLI 验证报告。中文使用说明见 [WINDOWS-使用说明.md](./WINDOWS-使用说明.md)。

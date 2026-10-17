@@ -14,8 +14,10 @@ const repo = fileURLToPath(new URL('../', import.meta.url));
 const sourceApp = path.resolve(process.env.SI_TEST_APP_DIRECTORY || path.join(repo, 'desktop/out/super individual-win32-x64'));
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'si-windows-smoke-'));
 // Exercise a complete copy outside the checkout, including spaces and non-ASCII paths.
-const appDir = path.join(temp, '独立软件 super individual');
-await fs.cp(sourceApp, appDir, { recursive: true, dereference: true });
+const relativeSource = path.relative(repo, sourceApp);
+const alreadyRelocated = relativeSource.startsWith('..' + path.sep) || path.isAbsolute(relativeSource);
+const appDir = alreadyRelocated ? sourceApp : path.join(temp, '独立软件 super individual');
+if (!alreadyRelocated) await fs.cp(sourceApp, appDir, { recursive: true, dereference: true });
 const executable = path.join(appDir, 'super individual.exe');
 const payload = path.join(appDir, 'resources/payload');
 const require = createRequire(path.join(payload, 'server/package.json'));
@@ -24,7 +26,7 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 await fs.mkdir('desktop/validation', {recursive:true});
 const fake = path.join(temp, 'fake-cli.cjs');
 const plan = {summary:'Windows connection verification',acceptance:'Plan saved without approval',steps:[{key:'check',title:'Check',description:'Inspect validation result',kind:'research',dependsOn:[]}]};
-await fs.writeFile(fake, `const args=process.argv.slice(2);if(args.includes('--version'))console.log('2.1.273');else if(args[0]==='auth')console.log(JSON.stringify({loggedIn:true}));else if(args[0]==='login')console.log('Logged in');else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,result:${JSON.stringify('```json\n'+JSON.stringify(plan)+'\n```')},session_id:'si-smoke',usage:{input_tokens:1,output_tokens:1}}));`);
+await fs.writeFile(fake, `const args=process.argv.slice(2);if(args.includes('--version'))console.log('2.1.273');else if(args[0]==='auth')console.log(JSON.stringify({loggedIn:true}));else if(args[0]==='login')console.log('Logged in');else{let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{const emit=()=>console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,result:input.trim()==='Respond with hello.'?'hello':${JSON.stringify('```json\n'+JSON.stringify(plan)+'\n```')},session_id:'si-smoke',usage:{input_tokens:1,output_tokens:1}}));if(input.includes('SI_SMOKE_SLOW'))setTimeout(emit,120000);else emit();});}`);
 for (const name of ['claude','codex']) await fs.writeFile(path.join(temp,name+'.cmd'), `@echo off\r\nchcp 65001 >nul\r\n"${path.join(payload,'bin/node.exe')}" "${fake}" %*\r\n`);
 const home = path.join(temp, 'data');
 const env = validationEnvironment(home, {PATH:[temp,path.join(process.env.SystemRoot,'System32'),process.env.SystemRoot].join(path.delimiter)});
@@ -57,13 +59,14 @@ async function quit() {
 async function tool(client,name,args={}){const v=await client.callTool({name,arguments:args});assert.ok(!v.isError,JSON.stringify(v));return JSON.parse(v.content[0].text);}
 async function planReady(c,route) {
  let detail;for(let i=0;i<90;i++){detail=await api(c,route);if(['plan_review','blocked'].includes(detail.workflow.phase))break;await sleep(1000);}
- assert.equal(detail.workflow.phase,'plan_review',JSON.stringify(detail));assert.ok(!detail.workflow.approvedRevision);
+ assert.equal(detail.workflow.phase,'plan_review',JSON.stringify({phase:detail.workflow.phase,error:detail.workflow.error,runs:detail.runs}));assert.ok(!detail.workflow.approvedRevision);
  assert.equal(detail.workflow.stages.filter(stage=>stage.role==='worker').length,0);
  return detail;
 }
 let client;
 try {
- await start();let c=await connection();
+ const firstStartedAt=Date.now();await start();let c=await connection();
+ const firstStartupSeconds=Math.round((Date.now()-firstStartedAt)/1000);
  let page=await desktopApp.firstWindow();
  await expect(page.getByRole('heading',{name:'创建你的个人工作区'})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.superIndividual.runtimeStatus().then(value=>value.dataDirectory)),home);
@@ -87,7 +90,7 @@ try {
  await page.getByRole('tab',{name:'需求',exact:true}).click();
  await page.getByRole('button',{name:'编辑需求'}).click();
  await page.getByLabel('任务名称',{exact:true}).fill('桌面修改任务已保存');
- await page.getByLabel('需求',{exact:true}).fill('Windows 中文内容已编辑并保存。');
+ await page.getByRole('tabpanel',{name:'需求',exact:true}).locator('textarea').fill('Windows 中文内容已编辑并保存。');
  await page.getByRole('button',{name:'保存修改'}).click();
  await expect(page.getByRole('heading',{name:'桌面修改任务已保存',exact:true}).last()).toBeVisible();
  assert.equal((await api(c,uiRoute)).task.description,'Windows 中文内容已编辑并保存。');
@@ -104,30 +107,40 @@ try {
  const task=await tool(client,'create_task',request);assert.equal((await tool(client,'create_task',request)).id,task.id);
  const submission={companyId:company.id,taskId:task.id,submissionId:randomUUID(),result:'Windows MCP writes succeeded',artifacts:[path.join(temp,'result.txt')]};
  const result=await tool(client,'report_result',submission);assert.equal((await tool(client,'report_result',submission)).commentId,result.commentId);
+ const draft=await tool(client,'get_task',{companyId:company.id,taskId:task.id});assert.equal(draft.task.phase,'draft');assert.equal(draft.approvedRevision,null);
  const route=`/individual/${company.id}/tasks/${task.id}`;
  await api(c,route+'/plan',{});
  await planReady(c,route);
- await assert.rejects(client.callTool({name:'approve_plan',arguments:{companyId:company.id,taskId:task.id}}),/not found/);
+ const denied=await client.callTool({name:'approve_plan',arguments:{companyId:company.id,taskId:task.id}});assert.equal(denied.isError,true);assert.match(denied.content[0].text,/not found/);
  const prematureAcceptance=await fetch(c.origin+'/api'+route+'/accept',{method:'POST',headers:{'Content-Type':'application/json',Origin:c.origin},body:'{}'});assert.equal(prematureAcceptance.status,409);
  assert.equal((await api(c,route)).workflow.phase,'plan_review');
+ const slowTask=await api(c,`/individual/${company.id}/tasks`,{title:'Exit pauses an active task',description:'SI_SMOKE_SLOW',coordinator:'claude',directory:temp,priority:'low'});
+ const slowRoute=`/individual/${company.id}/tasks/${slowTask.id}`;
+ await api(c,slowRoute+'/plan',{});
+ let active;
+ for(let i=0;i<60;i++){active=await api(c,slowRoute);assert.notEqual(active.workflow.phase,'blocked',active.workflow.error);if(active.runs.some(run=>run.status==='running'))break;await sleep(500);}
+ assert.ok(active.runs.some(run=>run.status==='running'),'Slow fixture did not start');
+ await desktopApp.evaluate(({dialog})=>{dialog.showMessageBox=async options=>({response:options.type==='question'?1:0});});
  await quit();
  const configFile=path.join(home,'instances/default/config.json');
  const previousConfig=JSON.parse(await fs.readFile(configFile,'utf8'));
  previousConfig.$meta.source='super individual';
  await fs.writeFile(configFile,JSON.stringify(previousConfig));
  const listener=net.createServer();await new Promise(r=>listener.listen(3100,'127.0.0.1',r));
- try {await start();c=await connection();assert.notEqual(new URL(c.origin).port,'3100');const before=c.pid;const p=spawn(executable,[],{cwd:temp,env,stdio:'ignore'});await new Promise(r=>p.once('exit',r));assert.equal((await connection()).pid,before);assert.equal((await tool(client,'get_task',{companyId:company.id,taskId:task.id})).task.id,task.id);assert.equal((await tool(client,'report_result',submission)).commentId,result.commentId);
+ let restartStartupSeconds;
+ try {const restartedAt=Date.now();await start();c=await connection();restartStartupSeconds=Math.round((Date.now()-restartedAt)/1000);assert.notEqual(new URL(c.origin).port,'3100');const before=c.pid;const p=spawn(executable,[],{cwd:temp,env,stdio:'ignore'});await new Promise(r=>p.once('exit',r));assert.equal((await connection()).pid,before);assert.equal((await tool(client,'get_task',{companyId:company.id,taskId:task.id})).task.id,task.id);assert.equal((await tool(client,'report_result',submission)).commentId,result.commentId);
    page=await desktopApp.firstWindow();await expect(page.getByRole('heading',{name:'桌面修改任务已保存',exact:true})).toBeVisible();
    assert.equal((await api(c,uiRoute)).task.description,'Windows 中文内容已编辑并保存。');
    assert.equal((await api(c,route)).workflow.phase,'plan_review');
+   assert.equal((await api(c,slowRoute)).workflow.phase,'paused');
    const repairedConfig=JSON.parse(await fs.readFile(configFile,'utf8'));
    assert.equal(repairedConfig.$meta.source,'configure');
    previousConfig.$meta.source='configure';assert.deepEqual(repairedConfig,previousConfig);
  }finally{await new Promise(r=>listener.close(r));}
- await api(c,route+'/cancel',{});await quit();
- await fs.writeFile('desktop/validation/windows-smoke.json',JSON.stringify({passed:true,platform:process.platform,arch:process.arch,checks:['relocated packaged startup with restricted PATH','fresh PostgreSQL','production UI rendered','UI workspace/task creation and editing','Windows cmd CLI discovery','MCP read/create/result','idempotent writes','human approval and acceptance gates','UI and database restart persistence','port conflict','single instance','window close hides and tray click restores','graceful exit and capability revocation'],cliFixture:true,realProviderCredentialsUsed:false},null,2));
+ await api(c,route+'/cancel',{});await api(c,slowRoute+'/cancel',{});await quit();
+ await fs.writeFile('desktop/validation/windows-smoke.json',JSON.stringify({passed:true,platform:process.platform,arch:process.arch,firstStartupSeconds,restartStartupSeconds,checks:['relocated packaged startup with restricted PATH','fresh PostgreSQL','production UI rendered','UI workspace/task creation and editing','Windows cmd CLI discovery','MCP read/create/result','idempotent writes','human approval and acceptance gates','UI and database restart persistence','port conflict','single instance','window close hides and tray click restores','active task paused and saved on exit without automatic resume','graceful exit and capability revocation'],cliFixture:true,realProviderCredentialsUsed:false},null,2));
  console.log('Windows packaged application smoke test passed');
 } catch(error) {
  const log=redactValidationLog(await fs.readFile(path.join(home,'logs/desktop-backend.log'),'utf8').catch(()=> 'No backend log'));
- await fs.writeFile('desktop/validation/windows-smoke-backend.log',log);console.error(log.slice(-30000));throw error;
+ await fs.writeFile('desktop/validation/windows-smoke-backend.log',log);console.error(log.slice(-10000));throw error;
 } finally {await client?.close();for(const p of processes)if(p.exitCode===null)spawn('taskkill.exe',['/PID',String(p.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}

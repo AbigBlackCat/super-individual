@@ -519,7 +519,7 @@ export async function ensureCodexSkillsInjected(
 
   const skillsHome = options.skillsHome ?? resolveCodexSkillsDir(resolveSharedCodexHomeDir());
   await fs.mkdir(skillsHome, { recursive: true });
-  const linkSkill = options.linkSkill;
+  const linkSkill = options.linkSkill ?? (process.platform === "win32" ? (source: string, target: string) => fs.symlink(source, target, "junction") : undefined);
   for (const entry of skillsEntries) {
     const target = path.join(skillsHome, entry.runtimeName);
 

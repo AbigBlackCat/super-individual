@@ -37,6 +37,7 @@ jobs:
         run: |
           node --test desktop/platform.test.mjs desktop/runtime.test.mjs desktop/si-mcp.test.mjs desktop/validation-runtime.test.mjs scripts/link-plugin-dev-sdk.test.js
           pnpm exec vitest run server/src/services/super-individual.test.ts server/src/routes/super-individual-mcp.test.ts packages/adapters/claude-local/src/server/probe-env.test.ts
+          pnpm exec vitest run packages/adapters/codex-local/src/server/windows-auth-link.test.ts
       - name: Deploy Windows production dependencies
         shell: bash
         run: |
@@ -81,8 +82,24 @@ jobs:
           path: |
             desktop/validation/windows-smoke-*.log
           if-no-files-found: ignore
+  codex_auth:
+    name: Codex auth invariants on Unix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run packages/adapters/codex-local/src/server/codex-home.test.ts
   publish:
-    needs: windows
+    needs: [windows, codex_auth]
     runs-on: ubuntu-latest
     permissions:
       contents: write
