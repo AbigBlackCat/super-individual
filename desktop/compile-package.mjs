@@ -7,9 +7,8 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const directory = process.cwd();
 const manifest = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'));
 function pnpm(args) {
-  const entry = process.env.npm_execpath;
-  if (!entry || !/\.(cjs|mjs|js)$/i.test(entry)) throw new Error('Run this helper through pnpm exec');
-  const result = spawnSync(process.execPath, [entry, ...args], { cwd: directory, stdio: 'inherit', env: process.env });
+  // Only the fixed build commands below enter this developer-only shell. pnpm exec does not set npm_execpath.
+  const result = spawnSync('pnpm', args, { cwd: directory, stdio: 'inherit', env: process.env, shell: process.platform === 'win32' });
   if (result.status !== 0) process.exit(result.status || 1);
 }
 if (manifest.name === '@paperclipai/paperclip-runner') pnpm(['run', 'build:typescript']);
