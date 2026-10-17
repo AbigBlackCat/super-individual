@@ -30,6 +30,8 @@ Windows 发布流程在干净检出环境编译、生产依赖部署、生产后
 
 ## 修复依据
 
+另外检查 Windows PE 导入表发现，PostgreSQL 原生组件依赖三个未随旧包附带的 VC++ DLL。打包现从已授权 Visual Studio 的 x64 redist 目录复制原始 Microsoft 签名 CRT 文件到 PostgreSQL、Node 和桌面程序目录，并附带独立署名和 SHA256 清单。生产后端检查及桌面冒烟还核验 PostgreSQL 实际加载的是包内 CRT，避免本机已安装的运行库掩盖遗漏。
+
 1. 生成配置的 `$meta.source` 不在配置 schema 枚举内；改为 `configure`，并仅修复已知旧值。
 2. PostgreSQL 原生工具从中文安装路径运行时，initdb 报非法 UTF-8 字节；通过英文运行目录的 junction 加载同一份原生文件，并保留完整 stderr。
 3. 后端大依赖图首次导入耗时超过旧超时；提供立即显示的准备界面及 Windows 5 分钟上限，不再将等待误报为缺少模块。

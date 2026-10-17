@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
 import { checkWindowsBackend } from './windows-backend-check.mjs';
+import { bundleWindowsVcRuntime } from './windows-vc-runtime.mjs';
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Build this package on Windows x64 so its PostgreSQL and native Node modules match');
 if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Use Node 24 for the packaged backend');
 const desktop = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,8 @@ if (!postgresCode.includes('si: initdb diagnostics')) {
   await fs.writeFile(postgresRuntime + '.staged', postgresCode);
   await fs.rename(postgresRuntime + '.staged', postgresRuntime);
 }
+const postgresBin = path.join(payload, 'server/node_modules/@embedded-postgres/windows-x64/native/bin');
+const vcRuntime = await bundleWindowsVcRuntime([path.join(payload, 'bin'), postgresBin]);
 await checkWindowsBackend(payload);
 for (const name of ['main.cjs', 'preload.cjs', 'runtime.mjs']) await fs.copyFile(path.join(desktop, name), path.join(staging, name));
 await fs.writeFile(path.join(staging, 'package.json'), JSON.stringify({ name: 'super-individual', productName: 'super individual', version, main: 'main.cjs', license: 'MIT', author: 'super individual contributors' }));
@@ -72,6 +75,9 @@ const cachedElectron = path.join(desktop, 'electron-cache/electron-v44.9.0-win32
 const hasCachedElectron = await fs.access(cachedElectron).then(() => true, () => false);
 const outputs = await packager({ dir: staging, name: 'super individual', executableName: 'super individual', platform: 'win32', arch: 'x64', electronVersion: '44.9.0', ...(hasCachedElectron ? { electronZipDir: path.dirname(cachedElectron) } : {}), out: path.join(desktop, 'out'), overwrite: true, prune: false, asar: false, icon: path.join(desktop, 'app.ico'), extraResource: [payload], win32metadata: { ProductName: 'super individual', FileDescription: 'Personal task and agent collaboration board', CompanyName: 'super individual contributors' }, appCopyright: 'Based on Paperclip (MIT). Original attribution retained.' });
 await fs.copyFile(path.join(root, 'LICENSE'), path.join(outputs[0], 'LICENSE-Paperclip.txt'));
+for (const {name} of vcRuntime) await fs.copyFile(path.join(payload, 'bin', name), path.join(outputs[0], name));
+await fs.copyFile(path.join(desktop, 'LICENSE-Microsoft-VC-Runtime.txt'), path.join(outputs[0], 'LICENSE-Microsoft-VC-Runtime.txt'));
+await fs.writeFile(path.join(outputs[0], 'Microsoft-VC-Runtime.json'), JSON.stringify(vcRuntime, null, 2));
 await fs.copyFile(path.join(desktop, 'WINDOWS-使用说明.md'), path.join(outputs[0], 'Windows-使用说明.md'));
 await fs.writeFile(path.join(outputs[0], '使用说明.txt'), 'super individual · Windows x64\r\n\r\n解压整个文件夹后，双击 super individual.exe。无需安装 Node 或 pnpm。\r\n首次打开创建自己的工作区；本软件不含任何用户数据、CLI 登录凭据或密钥。\r\nClaude Code / Codex CLI 需要在本机另行安装并登录。\r\n数据目录：%APPDATA%\\super individual\r\n关闭窗口继续在后台运行；通过托盘图标重新打开，菜单中的退出会停止并保存。\r\n首版使用现有 CLI 执行通道，未包含上游只支持 Unix 的原生 Runner。\r\n此版本尚未配置商业代码签名证书。\r\n');
 console.log('Windows package:', outputs[0]);

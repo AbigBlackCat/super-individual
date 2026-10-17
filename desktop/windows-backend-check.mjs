@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { availablePort, isDesktopBackendReady } from './runtime.mjs';
 import { fileURLToPath } from 'node:url';
 import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
+import { assertWindowsVcRuntimeLoaded } from './windows-vc-runtime.mjs';
 
 // Exercise the shipped Node, imports and PostgreSQL before copying the large Electron bundle.
 export async function checkWindowsBackend(payload) {
@@ -37,6 +38,8 @@ export async function checkWindowsBackend(payload) {
       if (launchError) throw launchError;
       if (child.exitCode !== null) throw new Error(`Production backend exited: ${child.exitCode}`);
       if (readyOrigin && await isDesktopBackendReady(readyOrigin, token)) {
+        const postgresPid = Number((await fs.readFile(path.join(home, 'instances/default/db/postmaster.pid'), 'utf8')).split('\n')[0]);
+        await assertWindowsVcRuntimeLoaded(postgresPid, path.join(payload, 'server/node_modules/@embedded-postgres/windows-x64/native/bin'));
         console.log(`Production Windows backend and PostgreSQL started successfully (${Math.round((Date.now() - startedAt) / 1000)}s)`); return;
       }
       await sleep(1000);

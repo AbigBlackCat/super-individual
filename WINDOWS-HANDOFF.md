@@ -26,6 +26,7 @@ https://github.com/AbigBlackCat/super-individual/actions/runs/39037842818
 2. [Node.js 24](https://nodejs.org/en/download)；构建环境使用过 **24.19.0**。
 3. pnpm **9.15.4**。不要直接升级到 pnpm 11。
 4. Claude Code 或 Codex CLI：在 Windows 单独安装并登录。无需迁移 Mac 的令牌或配置。
+5. 仅构建机需要已授权的 Visual Studio C++ Build Tools，供打包程序从 `VC/Redist/MSVC/<version>/x64/Microsoft.VC*.CRT` 提取原始签名运行库；也可用 `SI_VC_RUNTIME_DIRECTORY` 指向同类已授权的 x64 CRT redist 目录。日常使用者无需安装 Build Tools 或系统级 VC++ 运行库。
 
 本地 SI 首版使用现有 CLI 执行通道。上游原生 Runner 仅支持 Unix，Windows 构建跳过 Rust 二进制；无需为本次 Windows 构建安装 Rust。
 

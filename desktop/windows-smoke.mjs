@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
+import { assertWindowsVcRuntimeLoaded } from './windows-vc-runtime.mjs';
 import { _electron, expect } from '@playwright/test';
 if (process.platform !== 'win32') throw new Error('This test must run on Windows');
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -67,6 +68,8 @@ let client;
 try {
  const firstStartedAt=Date.now();await start();let c=await connection();
  const firstStartupSeconds=Math.round((Date.now()-firstStartedAt)/1000);
+ const postgresPid=Number((await fs.readFile(path.join(home,'instances/default/db/postmaster.pid'),'utf8')).split('\n')[0]);
+ await assertWindowsVcRuntimeLoaded(postgresPid,path.join(payload,'server/node_modules/@embedded-postgres/windows-x64/native/bin'));
  let page=await desktopApp.firstWindow();
  await expect(page.getByRole('heading',{name:'创建你的个人工作区'})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.superIndividual.runtimeStatus().then(value=>value.dataDirectory)),home);
@@ -138,7 +141,7 @@ try {
    previousConfig.$meta.source='configure';assert.deepEqual(repairedConfig,previousConfig);
  }finally{await new Promise(r=>listener.close(r));}
  await api(c,route+'/cancel',{});await api(c,slowRoute+'/cancel',{});await quit();
- await fs.writeFile('desktop/validation/windows-smoke.json',JSON.stringify({passed:true,platform:process.platform,arch:process.arch,firstStartupSeconds,restartStartupSeconds,checks:['relocated packaged startup with restricted PATH','fresh PostgreSQL','production UI rendered','UI workspace/task creation and editing','Windows cmd CLI discovery','MCP read/create/result','idempotent writes','human approval and acceptance gates','UI and database restart persistence','port conflict','single instance','window close hides and tray click restores','active task paused and saved on exit without automatic resume','graceful exit and capability revocation'],cliFixture:true,realProviderCredentialsUsed:false},null,2));
+ await fs.writeFile('desktop/validation/windows-smoke.json',JSON.stringify({passed:true,platform:process.platform,arch:process.arch,firstStartupSeconds,restartStartupSeconds,vcRuntimeAppLocal:true,checks:['relocated packaged startup with restricted PATH','app-local Microsoft VC runtime loaded','fresh PostgreSQL','production UI rendered','UI workspace/task creation and editing','Windows cmd CLI discovery','MCP read/create/result','idempotent writes','human approval and acceptance gates','UI and database restart persistence','port conflict','single instance','window close hides and tray click restores','active task paused and saved on exit without automatic resume','graceful exit and capability revocation'],cliFixture:true,realProviderCredentialsUsed:false},null,2));
  console.log('Windows packaged application smoke test passed');
 } catch(error) {
  const log=redactValidationLog(await fs.readFile(path.join(home,'logs/desktop-backend.log'),'utf8').catch(()=> 'No backend log'));

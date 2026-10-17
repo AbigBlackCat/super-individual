@@ -1,0 +1,18 @@
+Microsoft Visual C++ Runtime Redistributable
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+The Windows portable package includes unmodified, Microsoft-signed x64 CRT
+redistributable DLLs from the licensed Visual Studio / C++ Build Tools redist
+directory. These Microsoft components are subject to their Microsoft license
+terms, not the Paperclip MIT license.
+
+Redistribution lists and license references:
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
+https://visualstudio.microsoft.com/license-terms/
+
+Application-local deployment:
+https://learn.microsoft.com/en-us/cpp/windows/choosing-a-deployment-method
+
+The exact DLL filenames and SHA256 values are recorded in
+Microsoft-VC-Runtime.json. No system-wide runtime installer is run by SI.
