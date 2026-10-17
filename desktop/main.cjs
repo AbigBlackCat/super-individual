@@ -55,7 +55,7 @@ async function start() {
   let ready = false;
   while (Date.now() < deadline) {
     if (launchError) throw new Error('无法启动包内 Node：' + launchError.message, { cause: launchError });
-    try { const response = await fetch(origin + '/api/health', { signal: AbortSignal.timeout(1000) }); if (response.ok && (await response.json()).status === 'ok') { ready = true; break; } } catch {}
+    if (await runtime.isDesktopBackendReady(origin, mcpToken)) { ready = true; break; }
     if (backend.exitCode !== null) throw new Error('本机服务启动失败，请查看：' + path.join(dataDirectory, 'logs/desktop-backend.log'));
     await new Promise(resolve => setTimeout(resolve, 500));
   }

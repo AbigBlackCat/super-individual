@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { availablePort } from './runtime.mjs';
+import { randomBytes } from 'node:crypto';
+import { availablePort, isDesktopBackendReady } from './runtime.mjs';
 import { fileURLToPath } from 'node:url';
 import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
 
@@ -14,9 +15,10 @@ export async function checkWindowsBackend(payload) {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'si-production-check-'));
   const startedAt = Date.now();
   const port = await availablePort(0);
+  const token = randomBytes(32).toString('hex');
   const child = spawn(path.join(payload, 'bin/node.exe'), [path.join(payload, 'launch.mjs')], {
     cwd: home, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: validationEnvironment(home, { PORT: String(port) }),
+    env: validationEnvironment(home, { PORT: String(port), SUPER_INDIVIDUAL_MCP_TOKEN: token }),
   });
   let output = '';
   const record = chunk => { output += chunk.toString(); };
@@ -30,9 +32,9 @@ export async function checkWindowsBackend(payload) {
     for (let i = 0; i < 300; i++) {
       if (launchError) throw launchError;
       if (child.exitCode !== null) throw new Error(`Production backend exited: ${child.exitCode}`);
-      try { if ((await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) })).ok) {
+      if (await isDesktopBackendReady(`http://127.0.0.1:${port}`, token)) {
         console.log(`Production Windows backend and PostgreSQL started successfully (${Math.round((Date.now() - startedAt) / 1000)}s)`); return;
-      } } catch {}
+      }
       await sleep(1000);
     }
     throw new Error('Production Windows backend startup timed out');

@@ -40,6 +40,19 @@ export function desktopSearchPath(resources, platform = process.platform, env = 
 }
 
 export async function exists(file) { try { await access(file); return true; } catch { return false; } }
+export async function isDesktopBackendReady(origin, token) {
+  try {
+    const health = await fetch(origin + '/api/health', { signal: AbortSignal.timeout(1000) });
+    if (!health.ok || (await health.json()).status !== 'ok') return false;
+    // A different instance can claim a selected port while this one is loading.
+    // Its health response must never authorize connecting to its database.
+    const capability = await fetch(origin + '/api/individual-mcp/list_workspaces', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-si-mcp-token': token, Origin: origin },
+      body: '{}', signal: AbortSignal.timeout(1000),
+    });
+    return capability.ok && Array.isArray(await capability.json());
+  } catch { return false; }
+}
 export async function availablePort(preferred = 3100) {
   const listen = port => new Promise((resolve, reject) => {
     const server = net.createServer(); server.unref(); server.once('error', reject);

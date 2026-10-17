@@ -25,7 +25,7 @@ await fs.mkdir('desktop/validation', {recursive:true});
 const fake = path.join(temp, 'fake-cli.cjs');
 const plan = {summary:'Windows connection verification',acceptance:'Plan saved without approval',steps:[{key:'check',title:'Check',description:'Inspect validation result',kind:'research',dependsOn:[]}]};
 await fs.writeFile(fake, `const args=process.argv.slice(2);if(args.includes('--version'))console.log('2.1.273');else if(args[0]==='auth')console.log(JSON.stringify({loggedIn:true}));else if(args[0]==='login')console.log('Logged in');else console.log(JSON.stringify({type:'result',subtype:'success',is_error:false,result:${JSON.stringify('```json\n'+JSON.stringify(plan)+'\n```')},session_id:'si-smoke',usage:{input_tokens:1,output_tokens:1}}));`);
-for (const name of ['claude','codex']) await fs.writeFile(path.join(temp,name+'.cmd'), `@echo off\r\n"${path.join(payload,'bin/node.exe')}" "${fake}" %*\r\n`);
+for (const name of ['claude','codex']) await fs.writeFile(path.join(temp,name+'.cmd'), `@echo off\r\nchcp 65001 >nul\r\n"${path.join(payload,'bin/node.exe')}" "${fake}" %*\r\n`);
 const home = path.join(temp, 'data');
 const env = validationEnvironment(home, {PATH:[temp,path.join(process.env.SystemRoot,'System32'),process.env.SystemRoot].join(path.delimiter)});
 const connectionFile = path.join(home, 'mcp/connection.json');

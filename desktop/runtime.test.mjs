@@ -4,10 +4,26 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, realpath } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { availablePort, relocateConfig, migrateLegacyData, safeOpenPath, acquireRuntimeLock, prepareWindowsPostgres } from './runtime.mjs';
+import http from 'node:http';
+import { availablePort, relocateConfig, migrateLegacyData, safeOpenPath, acquireRuntimeLock, prepareWindowsPostgres, isDesktopBackendReady } from './runtime.mjs';
 test('port conflict selects an available loopback port', async () => {
   const listener = net.createServer(); await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
   try { assert.notEqual(await availablePort(listener.address().port), listener.address().port); } finally { listener.close(); }
+});
+
+test('a healthy response from another instance cannot satisfy desktop readiness', async () => {
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type','application/json');
+    if(req.url==='/api/health')res.end(JSON.stringify({status:'ok'}));
+    else if(req.headers['x-si-mcp-token']==='owned-capability')res.end('[]');
+    else {res.statusCode=403;res.end('{}');}
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try {
+    const origin=`http://127.0.0.1:${server.address().port}`;
+    assert.equal(await isDesktopBackendReady(origin,'wrong-capability'),false);
+    assert.equal(await isDesktopBackendReady(origin,'owned-capability'),true);
+  } finally { await new Promise(resolve=>server.close(resolve)); }
 });
 test('migration keeps the original, rewrites data paths and is idempotent', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'si-migrate-'));
