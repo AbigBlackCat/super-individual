@@ -1,0 +1,104 @@
+name: SI Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version
+        default: '0.1.0'
+        required: true
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      NPM_CONFIG_SCRIPT_SHELL: C:\Program Files\Git\bin\bash.exe
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+      - name: Build the SI dependency graph
+        shell: bash
+        run: pnpm -r --workspace-concurrency=1 --filter '@paperclipai/server...' --filter '@paperclipai/ui...' exec node "$PWD/desktop/compile-package.mjs"
+      - name: Runtime checks
+        shell: bash
+        run: |
+          node --test desktop/platform.test.mjs desktop/runtime.test.mjs desktop/si-mcp.test.mjs
+          pnpm exec vitest run server/src/services/super-individual.test.ts server/src/routes/super-individual-mcp.test.ts packages/adapters/claude-local/src/server/probe-env.test.ts
+      - name: Deploy Windows production dependencies
+        shell: bash
+        run: pnpm --filter @paperclipai/server --config.node-linker=hoisted deploy --prod desktop/payload/server
+      - name: Package application
+        shell: bash
+        run: |
+          npm ci --prefix desktop
+          node desktop/package-windows.mjs
+      - name: Smoke test the packaged application
+        shell: bash
+        run: node desktop/windows-smoke.mjs
+      - name: Make portable ZIP
+        shell: pwsh
+        env:
+          SI_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:SI_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          $zip = "si-windows-x64-v$($env:SI_VERSION).zip"
+          Compress-Archive -Path 'desktop/out/super individual-win32-x64/*' -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $zip" | Out-File -Encoding ascii SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: si-windows-release
+          path: |
+            si-windows-x64-*.zip
+            SHA256SUMS.txt
+            desktop/validation/windows-smoke.json
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: si-windows-diagnostics
+          path: |
+            desktop/validation/windows-smoke-*.log
+            ~/AppData/Roaming/super individual/logs/desktop-backend.log
+          if-no-files-found: ignore
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: si-windows-release
+          path: release
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SI_VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$SI_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          ZIP=$(find release -name '*.zip' -print -quit)
+          SUM=$(find release -name SHA256SUMS.txt -print -quit)
+          cat > notes.txt <<'NOTES'
+          Windows x64 便携版：解压完整 ZIP 后双击 `super individual.exe`。
+
+          包含生产界面、Node 24 和本机 PostgreSQL；无需安装 pnpm、Rust 或源码。
+          Claude Code / Codex CLI 请在 Windows 本机另行安装并登录。
+          数据保存在 `%APPDATA%\super individual`，此下载不含用户数据或凭据。
+          使用现有 CLI 执行通道，未包含上游只支持 Unix 的原生 Runner。
+          此版本未配置商业代码签名。详见仓库中的 Windows 使用说明与验证范围。
+          NOTES
+          gh release create "v$SI_VERSION" "$ZIP" "$SUM" --title "super individual $SI_VERSION · Windows x64" --notes-file notes.txt --target "${{ github.sha }}"
