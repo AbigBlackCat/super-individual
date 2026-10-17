@@ -32,6 +32,7 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   Add-Type -Path (Join-Path $PSScriptRoot 'windows-ci-token.cs')
+  if ($isAdministrator -and $env:GITHUB_ACTIONS -eq 'true') { [SiWindowsCiToken]::GrantDesktopAccess() }
   $childPid = [SiWindowsCiToken]::Start($powershell, ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded), $repo)
   Write-Host "Started restricted validation process $childPid"
   $deadline = (Get-Date).AddMinutes(30)
