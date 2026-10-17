@@ -16,6 +16,15 @@ $isAdministrator = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::
 if (!$Receipt) { $Receipt = Join-Path $diagnostics ("windows-smoke-ci-$Stage-" + [guid]::NewGuid().ToString('N') + '.json') }
 $stdout = "$Receipt.stdout.log"
 $stderr = "$Receipt.stderr.log"
+$logOffsets = @{}
+function Write-NewValidationLogs {
+  foreach ($log in @($stdout, $stderr)) {
+    if (!(Test-Path -LiteralPath $log)) { continue }
+    try { $content = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8) } catch { continue }
+    $offset = if ($logOffsets.ContainsKey($log)) { $logOffsets[$log] } else { 0 }
+    if ($content.Length -gt $offset) { Write-Host -NoNewline $content.Substring($offset); $logOffsets[$log] = $content.Length }
+  }
+}
 
 if (!$Child -and ($isAdministrator -or $Restrict)) {
   # PostgreSQL correctly refuses an elevated token. Keep the same user/profile
@@ -37,6 +46,7 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
   Write-Host "Started restricted validation process $childPid"
   $deadline = (Get-Date).AddMinutes(30)
   while (!(Test-Path -LiteralPath $Receipt)) {
+    Write-NewValidationLogs
     if ((Get-Date) -gt $deadline) { throw 'Ordinary-user validation timed out' }
     $childExitCode = [SiWindowsCiToken]::ExitCode()
     if ($childExitCode -ne 259 -and !(Test-Path -LiteralPath $Receipt)) { throw ('Validation process exited without a receipt: 0x{0:X8}' -f $childExitCode) }
@@ -54,7 +64,10 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
       $script = if ($Stage -eq 'package') { 'package-windows.mjs' } else { 'windows-smoke.mjs' }
       $arguments = '"' + (Join-Path $PSScriptRoot $script) + '"'
     }
-    $process = Start-Process -FilePath $NodeExecutable -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -Wait -PassThru
+    $process = Start-Process -FilePath $NodeExecutable -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    # Start-Process -Wait also waits for detached descendants. The Node checker
+    # owns backend cleanup; preserve its result and wait for that process only.
+    $process.WaitForExit()
     $code = $process.ExitCode
   } catch {
     $_ | Out-String | Set-Content -LiteralPath $stderr -Encoding UTF8
@@ -64,6 +77,6 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
     Move-Item -LiteralPath "$Receipt.staged" -Destination $Receipt -Force
   }
 }
-foreach ($log in @($stdout, $stderr)) { if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | Write-Host } }
+Write-NewValidationLogs
 if ($result.administrator) { throw 'Expected an ordinary-user token' }
 exit $result.exitCode
