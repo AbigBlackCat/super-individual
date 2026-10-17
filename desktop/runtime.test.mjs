@@ -14,17 +14,17 @@ test('migration keeps the original, rewrites data paths and is idempotent', asyn
   try {
     const from = path.join(dir, 'old'), to = path.join(dir, 'new');
     await mkdir(path.join(from, 'instances/default'), { recursive: true });
-    await writeFile(path.join(from, 'instances/default/config.json'), JSON.stringify({ db: from + '/instances/default/db', other: from + '-unrelated' }));
+    await writeFile(path.join(from, 'instances/default/config.json'), JSON.stringify({ db: path.join(from, 'instances/default/db'), other: from + '-unrelated' }));
     assert.equal(await migrateLegacyData(from, to), true);
     const config = JSON.parse(await readFile(path.join(to, 'instances/default/config.json')));
-    assert.equal(config.db, to + '/instances/default/db'); assert.equal(config.other, from + '-unrelated');
+    assert.equal(config.db, path.join(to, 'instances/default/db')); assert.equal(config.other, from + '-unrelated');
     assert.equal(await migrateLegacyData(from, to), false);
     assert.ok(await readFile(path.join(from, 'instances/default/config.json')));
   } finally { await rm(dir, { recursive: true }); }
 });
 test('Finder bridge rejects symlink escapes', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'si-path-'));
-  try { await mkdir(path.join(dir, 'root')); await symlink(os.tmpdir(), path.join(dir, 'root/escape')); await assert.rejects(safeOpenPath(path.join(dir, 'root/escape'), [path.join(dir, 'root')])); assert.equal(await safeOpenPath(path.join(dir, 'root'), [path.join(dir, 'root')]), await realpath(path.join(dir, 'root'))); } finally { await rm(dir, { recursive: true }); }
+  try { await mkdir(path.join(dir, 'root')); await symlink(os.tmpdir(), path.join(dir, 'root/escape'), process.platform === 'win32' ? 'junction' : 'dir'); await assert.rejects(safeOpenPath(path.join(dir, 'root/escape'), [path.join(dir, 'root')])); assert.equal(await safeOpenPath(path.join(dir, 'root'), [path.join(dir, 'root')]), await realpath(path.join(dir, 'root'))); } finally { await rm(dir, { recursive: true }); }
 });
 
 test('migration refuses a live old database and leaves both sides untouched', async () => {
