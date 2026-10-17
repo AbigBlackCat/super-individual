@@ -77,7 +77,7 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $zip" | Out-File -Encoding ascii SHA256SUMS.txt
           Copy-Item -LiteralPath 'desktop/WINDOWS-使用说明.md' -Destination 'Windows-Quickstart.md'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: si-windows-release
           path: |
@@ -86,7 +86,7 @@ jobs:
             desktop/validation/windows-smoke.json
             Windows-Quickstart.md
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: si-windows-diagnostics
