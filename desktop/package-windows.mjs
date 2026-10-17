@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
+import { checkWindowsBackend } from './windows-backend-check.mjs';
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Build this package on Windows x64 so its PostgreSQL and native Node modules match');
 if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Use Node 24 for the packaged backend');
 const desktop = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,7 @@ async function normalize(dir) {
   }
 }
 await normalize(path.join(payload, 'server'));
+await checkWindowsBackend(payload);
 const staging = path.join(desktop, 'app-source-windows');
 await fs.mkdir(staging, { recursive: true });
 for (const name of ['main.cjs', 'preload.cjs', 'runtime.mjs', 'tray.png']) await fs.copyFile(path.join(desktop, name), path.join(staging, name));

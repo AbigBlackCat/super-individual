@@ -60,5 +60,5 @@ try {
  console.log('Windows packaged application smoke test passed');
 } catch(error) {
  const log=await fs.readFile(path.join(desktopDataDirectory(),'logs/desktop-backend.log'),'utf8').catch(()=> 'No backend log');
- await fs.writeFile('desktop/validation/windows-smoke-backend.log',log);throw error;
+ await fs.writeFile('desktop/validation/windows-smoke-backend.log',log);console.error(log.slice(-30000));throw error;
 } finally {await client?.close();for(const p of processes)if(p.exitCode===null)spawn('taskkill.exe',['/PID',String(p.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}

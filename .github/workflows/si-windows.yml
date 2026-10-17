@@ -75,7 +75,6 @@ jobs:
           name: si-windows-diagnostics
           path: |
             desktop/validation/windows-smoke-*.log
-            ~/AppData/Roaming/super individual/logs/desktop-backend.log
           if-no-files-found: ignore
   publish:
     needs: windows
