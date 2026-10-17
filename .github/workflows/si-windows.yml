@@ -26,6 +26,9 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 9.15.4
+      - name: Verify ordinary-user CI launcher
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/windows-ci-check.ps1 -Stage probe -Restrict
       - name: Install dependencies
         shell: bash
         run: pnpm install --frozen-lockfile

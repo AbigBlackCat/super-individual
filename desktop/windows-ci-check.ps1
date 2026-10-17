@@ -1,6 +1,7 @@
 param(
   [ValidateSet('package', 'smoke', 'probe')][string]$Stage,
   [switch]$Child,
+  [switch]$Restrict,
   [string]$Receipt,
   [string]$NodeExecutable
 )
@@ -16,19 +17,20 @@ if (!$Receipt) { $Receipt = Join-Path $diagnostics ("windows-smoke-ci-$Stage-" +
 $stdout = "$Receipt.stdout.log"
 $stderr = "$Receipt.stderr.log"
 
-if (!$Child -and $isAdministrator) {
+if (!$Child -and ($isAdministrator -or $Restrict)) {
   # PostgreSQL correctly refuses an elevated token. Keep the same user/profile
   # and disable administrator membership for these ordinary desktop checks.
   function Quote-Literal([string]$Value) { return "'" + $Value.Replace("'", "''") + "'" }
   $command = '$env:SI_VERSION=' + (Quote-Literal $env:SI_VERSION) + '; & ' + (Quote-Literal $PSCommandPath) + ' -Child -Stage ' + $Stage + ' -Receipt ' + (Quote-Literal $Receipt) + ' -NodeExecutable ' + (Quote-Literal $NodeExecutable)
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-  $program = '"' + $powershell + '" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded
-  & (Join-Path $env:SystemRoot 'System32\runas.exe') /env /trustlevel:0x20000 $program
-  if ($LASTEXITCODE -ne 0) { throw 'Could not start ordinary-user validation' }
+  Add-Type -Path (Join-Path $PSScriptRoot 'windows-ci-token.cs')
+  $childPid = [SiWindowsCiToken]::Start($powershell, ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ' + $encoded), $repo)
+  Write-Host "Started restricted validation process $childPid"
   $deadline = (Get-Date).AddMinutes(30)
   while (!(Test-Path -LiteralPath $Receipt)) {
     if ((Get-Date) -gt $deadline) { throw 'Ordinary-user validation timed out' }
+    if (!(Get-Process -Id $childPid -ErrorAction SilentlyContinue) -and !(Test-Path -LiteralPath $Receipt)) { throw 'Validation process exited without a receipt' }
     Start-Sleep -Seconds 1
   }
   $result = Get-Content -LiteralPath $Receipt -Raw | ConvertFrom-Json

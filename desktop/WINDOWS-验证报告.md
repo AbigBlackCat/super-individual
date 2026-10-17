@@ -26,7 +26,7 @@
 
 Windows 发布流程在干净检出环境编译、生产依赖部署、生产后端检查、Electron 打包后，移动软件到源码外的新目录，运行完整桌面冒烟；全部通过后才允许发布 ZIP。独立 Ubuntu job 验证现有 50 项 Codex 账户隔离检查，已通过。最终运行链接和打包报告随 Release 发布。
 
-早期发布机失败日志已明确显示 PostgreSQL 拒绝管理员令牌。CI 使用 `windows-ci-check.ps1` 通过 Windows 内置普通信任级别启动同用户检查，并断言已去除管理员组权限；没有修改 PostgreSQL 的拒绝管理员行为。
+早期发布机失败日志已明确显示 PostgreSQL 拒绝管理员令牌。CI 使用 `windows-ci-check.ps1` 和 Win32 `CreateRestrictedToken` 启动同用户检查，禁用管理员组、移除高权限并使用中等完整性级别；子进程断言已去除管理员组权限。没有修改 PostgreSQL 的拒绝管理员行为。
 
 ## 修复依据
 
