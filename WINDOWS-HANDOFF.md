@@ -2,9 +2,13 @@
 
 仓库：https://github.com/AbigBlackCat/super-individual （Public）
 
-此交付是完整源码与 Windows 构建流程。**Windows 桌面应用尚未通过首次启动测试，当前没有已验证可用的 Windows 安装包。** 按用户要求，后续改动在 Windows 电脑继续进行。
+2026-10-17 接手后的更新：Windows 本机便携应用已通过独立目录启动、界面任务创建与编辑、退出暂停保存和重启持久化检查；真实 Codex 完成规划、人工批准、执行、独立审查与人工验收。发布流程正在复验云端构建产物，最终可下载版本以 GitHub Release 及其验证报告为准。
 
-## 已完成与待修复
+已依据日志修复配置元数据枚举、中文软件目录下 PostgreSQL 原生路径、Windows 普通账户 Codex 登录文件链接、后端端口归属确认和退出过程。首次冷启动的导入耗时可能超过原先的 120 秒，现显示准备界面并最多等待 5 分钟。云端 Windows runner 使用管理员令牌，发布检查另以同用户普通令牌执行，保留 PostgreSQL 拒绝管理员的安全限制。未改动任务 API、状态枚举、companyId 或调度审批边界。
+
+详细使用限制见 `desktop/WINDOWS-使用说明.md`，验证记录见 `desktop/WINDOWS-验证报告.md`。下文“已完成与待修复”保留原始交接状态供追溯，不能作为当前版本验证结果。
+
+## 原始交接状态（历史记录）
 
 - macOS 本机版本已运行，原工作区和数据留在原 Mac。
 - Windows x64 前后端编译通过，9 项桌面/MCP 检查及 14 项工作流/连接检查通过。
@@ -106,4 +110,4 @@ node desktop/payload/launch.mjs
 
 ## 给 Windows 编程助手的接手提示
 
-> 请先阅读 WINDOWS-HANDOFF.md。当前 Windows x64 编译和 23 项检查已通过，Electron 已能打包，但首次启动后端未就绪。先运行生产后端检查并取得具体错误日志，修复 Windows 启动，再运行桌面冒烟测试和 GitHub 发布流程。保留现有 API、审批与人工验收边界，不迁移或上传任何个人凭据和数据库，不重写调度系统。
+> 请先阅读 WINDOWS-HANDOFF.md、desktop/WINDOWS-验证报告.md 和对应 Release 的验证报告。Windows 构建仅编译 SI 使用的 React、后端与 CLI 通道；不要求移植 Unix Runner。复现时使用独立的 SI_DATA_DIRECTORY，运行生产后端检查、针对性检查和便携包桌面冒烟测试。保留现有 API、审批与人工验收边界，不迁移或上传任何个人凭据和数据库，不重写调度系统。
