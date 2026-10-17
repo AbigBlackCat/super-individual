@@ -48,13 +48,15 @@ jobs:
           node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); delete p.pnpm.patchedDependencies["acpx@0.12.0"]; fs.writeFileSync("package.json",JSON.stringify(p,null,2));'
           pnpm --filter @paperclipai/server --config.node-linker=hoisted deploy --prod desktop/payload/server
       - name: Package application
-        shell: bash
+        shell: pwsh
         run: |
           npm ci --prefix desktop
-          node desktop/package-windows.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/windows-ci-check.ps1 -Stage package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test the packaged application
-        shell: bash
-        run: node desktop/windows-smoke.mjs
+        shell: pwsh
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File desktop/windows-ci-check.ps1 -Stage smoke
       - name: Make portable ZIP
         shell: pwsh
         env:
