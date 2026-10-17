@@ -5,23 +5,25 @@
 环境：Windows 11 x64、Node.js 24.19.0、pnpm 9.15.4、Electron 44.9.0、Git for Windows。测试数据使用独立临时目录，未访问或修改正式 `%APPDATA%\super individual` 数据。
 
 - 21 项桌面路径、运行时、MCP、验证隔离及开发链接检查通过。
-- 14 项任务工作流、MCP 路由及 Claude 探测环境检查通过。
+- 15 项任务工作流、MCP 路由、Windows Codex 角色权限及 Claude 探测环境检查通过。
 - 6 项 Windows Codex 登录硬链接和目录 junction 检查通过，包含主账户凭据原子替换、退出登录、独立公司凭据保留、API key 覆盖隔离和跨卷失败关闭。
 - Codex adapter 编译与类型检查通过；SI 前后端依赖图编译通过。
 - 便携应用在源码目录外、含中文和空格的软件目录运行，限制 PATH 后使用包内 Node 与 PostgreSQL。生产界面实际显示，UI 创建、编辑和保存任务，重启后任务及配置仍存在。
 - MCP 五个工具的读任务、草稿创建、幂等写入、未审查结果回传通过；MCP 无计划批准能力，提前最终验收被拒绝。计划批准前无执行工作进程。
 - 端口占用时自动选择其他端口，并核验本实例的就绪令牌和子进程实际绑定端口。重复启动复用原进程。关闭窗口隐藏到托盘，实际托盘点击恢复窗口。
 - 有任务运行时通过退出确认暂停并保存；重启后保持暂停，无自动继续执行。退出后撤销 MCP 连接发现文件。
-- 完整模拟 CLI 冒烟 15 项通过，增加了 PostgreSQL 实际加载包内 CRT 的校验。对 GitHub 公开 ZIP 下载、校验并解压后，本机测得首次启动 49 秒、重启 37 秒；另一次全新复制的冷启动为 239 秒。测量取决于磁盘、缓存和安全软件。
+- 完整模拟 CLI 冒烟 15 项通过，增加了 PostgreSQL 实际加载包内 CRT 的校验。对 GitHub 公开 v0.1.1 ZIP 下载、校验并解压后，本机测得首次启动 48 秒、重启 36 秒；早期另一次全新复制的冷启动为 239 秒。测量取决于磁盘、缓存和安全软件。
 - PostgreSQL 原生检查在独立临时数据库连续执行三次启动、正常停止及 SQL 磁盘持久化验证，通过后才进入生产后端和桌面打包检查。
 
 `windows-smoke.json` 是自动模拟 CLI 报告，不使用用户登录或真实模型。
 
 ## 真实 CLI 和模型
 
-本机安装并登录的 `codex-cli 0.163.0-alpha.10.2` 已真实调用模型。早期本机软件的完整复测退出码为 0，耗时 679 秒；随后 v0.1.0 下载包的追加测试出现终端等待和文件工具 EPERM，执行角色未产出文件，已单独记录为失败，不能用早期记录代替下载包结果。
+本机安装并登录的 `codex-cli 0.163.0-alpha.10.2` 对正式下载、校验并解压的 v0.1.1 软件完成真实模型全流程：识别登录、生成计划、界面人工批准、执行角色写出指定文件、独立审查、界面人工最终验收及正常退出。退出码 0，耗时 163 秒。测试软件未修改，报告 `windows-real-codex.json` 记录对应 ZIP 名和 SHA256。
 
-依据 [OpenAI Windows 沙箱文档](https://learn.chatgpt.com/docs/windows/windows-sandbox) 完成兼容性探测，本机支持 MXC，受限 workspace-write 下真实 CLI 文件写入通过。Windows SI 调用现增加 `features.prefer_mxc=true` 与 CLI `approval_policy="never"`，规划及审查仍为只读，执行仍为 workspace-write，计划批准和最终验收仍由 SI 界面控制。没有关闭沙箱或启用 bypass。兼容副本的完整真实规划、UI 批准、工作目录文件产出、独立审查、UI 人工最终验收及正常退出全部通过，退出码 0，耗时 380 秒。该修复进入 v0.1.1 发布流程。
+依据 [OpenAI Windows 沙箱文档](https://learn.chatgpt.com/docs/windows/windows-sandbox) 完成兼容性探测，本机支持 MXC，受限 workspace-write 下真实 CLI 文件写入通过。Windows SI 调用增加 `features.prefer_mxc=true` 与 CLI `approval_policy="never"`，规划及审查仍为只读，执行仍为 workspace-write，计划批准和最终验收仍由 SI 界面控制。没有关闭沙箱或启用 bypass。
+
+历史记录：早期本机软件真实测试通过，耗时 679 秒；v0.1.0 下载包的追加测试出现终端等待和文件工具 EPERM，执行角色未产出文件，单独记录为失败。修复后的兼容副本通过，耗时 380 秒，随后正式 v0.1.1 下载包通过，耗时 163 秒。早期记录不代替最终交付验证。
 
 真实模型报告不包含凭据、个人任务或 CLI 配置；失败尝试与通过记录分开保存。
 
@@ -31,11 +33,11 @@
 
 Windows 发布流程在干净检出环境编译、生产依赖部署、生产后端检查、Electron 打包后，复制软件到源码外的新目录，运行完整桌面冒烟；全部通过后才允许发布 ZIP。独立 Ubuntu job 验证现有 50 项 Codex 账户隔离检查，已通过。
 
-[最终发布流程](https://github.com/AbigBlackCat/super-individual/actions/runs/39063080392) 全部成功，云端 15 项桌面验收测得首次启动 32 秒、重启 13 秒。
+[v0.1.1 发布流程](https://github.com/AbigBlackCat/super-individual/actions/runs/39066672695) 全部成功，Windows 42 项针对性检查、Unix 50 项账户隔离检查及云端 15 项桌面验收通过；云端测得首次启动 22 秒、重启 12 秒。发布源码为 `709a871d6884d1420247c0486677d22640f9b7fa`。
 
-[v0.1.0 下载](https://github.com/AbigBlackCat/super-individual/releases/tag/v0.1.0) 的 ZIP 为 830,979,808 字节，SHA256：
+[v0.1.1 下载](https://github.com/AbigBlackCat/super-individual/releases/tag/v0.1.1) 的 ZIP 为 830,980,742 字节，SHA256：
 
-`22f7d87eb43c4296e824805ac5b027e8922253b24acaeda15f95f0d877a9c500`
+`063e9c22e3105f0799e3115f901ca2e4a653fcaa3cb27945045d9d64430f1690`
 
 本机实际下载此 ZIP 并在源码外完整解压，15 项桌面验收再次通过。文件检查确认 Node 24.19.0、PostgreSQL 18.1、x64 可执行文件、10 个 Microsoft CRT 原始校验值及 Paperclip MIT 许可证均正确；未发现个人数据库、凭据配置文件名或包外链接。应用程序 Authenticode 状态为 `NotSigned`。完整文件与运行报告分别为 `windows-package-audit.json`、`windows-smoke.json`（云端）和 `windows-downloaded-smoke.json`（下载包）。
 

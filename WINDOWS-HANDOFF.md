@@ -2,9 +2,9 @@
 
 仓库：https://github.com/AbigBlackCat/super-individual （Public）
 
-2026-10-18 交付更新：[Windows x64 v0.1.0 已发布](https://github.com/AbigBlackCat/super-individual/releases/tag/v0.1.0)。云端和下载 ZIP 解压后的本机软件均通过 15 项桌面验收，覆盖独立目录启动、界面任务创建与编辑、退出暂停保存和重启持久化。真实 Codex 已完成规划、人工批准、执行、独立审查与人工验收；对下载包的追加真实模型复测结果见 Release 附带报告。
+2026-10-18 交付更新：[Windows x64 v0.1.1 已发布](https://github.com/AbigBlackCat/super-individual/releases/tag/v0.1.1)。云端和下载 ZIP 解压后的本机软件均通过 15 项桌面验收，覆盖独立目录启动、界面任务创建与编辑、退出暂停保存和重启持久化。正式下载包的真实 Codex 全流程通过，耗时 163 秒，包含规划、界面批准、文件产出、独立审查、界面最终验收和正常退出。模拟 CLI 和真实模型报告分别附在 Release 中。
 
-已依据日志修复配置元数据枚举、中文软件目录下 PostgreSQL 原生路径、Windows 普通账户 Codex 登录文件链接、后端端口归属确认和退出过程。PostgreSQL 改用 pg_ctl 正常停止，包内附带所需 Microsoft CRT，校验进程实际加载包内 DLL。首次冷启动的导入耗时可能超过原先的 120 秒，现显示准备界面并最多等待 5 分钟。云端 Windows runner 使用管理员令牌，发布检查另以同用户受限令牌执行，保留 PostgreSQL 拒绝管理员的安全限制。未改动任务 API、状态枚举、companyId 或调度审批边界。
+已依据日志修复配置元数据枚举、中文软件目录下 PostgreSQL 原生路径、Windows 普通账户 Codex 登录文件链接、后端端口归属确认和退出过程。PostgreSQL 改用 pg_ctl 正常停止，包内附带所需 Microsoft CRT，校验进程实际加载包内 DLL。Windows Codex 在现有只读或 workspace-write 沙箱内优先 MXC，修复旧版下载包真实执行阻塞。首次冷启动的导入耗时可能超过原先的 120 秒，现显示准备界面并最多等待 5 分钟。云端 Windows runner 使用管理员令牌，发布检查另以同用户受限令牌执行，保留 PostgreSQL 拒绝管理员的安全限制。未改动任务 API、状态枚举、companyId 或调度审批边界。
 
 详细使用限制见 `desktop/WINDOWS-使用说明.md`，验证记录见 `desktop/WINDOWS-验证报告.md`。下文“已完成与待修复”保留原始交接状态供追溯，不能作为当前版本验证结果。
 
