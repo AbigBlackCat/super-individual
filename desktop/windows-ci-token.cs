@@ -16,6 +16,10 @@ public static class SiWindowsCiToken {
     [StructLayout(LayoutKind.Sequential)] struct ProcessInfo { public IntPtr process, thread; public uint pid, tid; }
     [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetExitCodeProcess(IntPtr process, out uint code);
+    static IntPtr validationProcess;
+    public static uint ExitCode() { uint code; Check(GetExitCodeProcess(validationProcess, out code), "GetExitCodeProcess"); return code; }
+    public static void Close() { if (validationProcess != IntPtr.Zero) { CloseHandle(validationProcess); validationProcess = IntPtr.Zero; } }
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool CreateRestrictedToken(IntPtr existing, uint flags, uint disabledCount, SidAndAttributes[] disabled, uint deletedCount, IntPtr deleted, uint restrictedCount, IntPtr restricted, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] static extern bool SetTokenInformation(IntPtr token, int kind, IntPtr value, int size);
@@ -42,7 +46,7 @@ public static class SiWindowsCiToken {
             var startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)), flags = 1, showWindow = 0 };
             ProcessInfo process;
             Check(CreateProcessAsUser(token, executable, new StringBuilder("\"" + executable + "\" " + arguments), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, cwd, ref startup, out process), "CreateProcessAsUser");
-            CloseHandle(process.thread); CloseHandle(process.process); return process.pid;
+            CloseHandle(process.thread); validationProcess = process.process; return process.pid;
         } finally {
             if (token != IntPtr.Zero) CloseHandle(token); if (original != IntPtr.Zero) CloseHandle(original);
             foreach (var memory in new[] { admins, powerUsers, medium, user, owner, label }) if (memory != IntPtr.Zero) Marshal.FreeHGlobal(memory);

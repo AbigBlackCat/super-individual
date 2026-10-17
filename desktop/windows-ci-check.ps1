@@ -21,6 +21,13 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
   # PostgreSQL correctly refuses an elevated token. Keep the same user/profile
   # and disable administrator membership for these ordinary desktop checks.
   function Quote-Literal([string]$Value) { return "'" + $Value.Replace("'", "''") + "'" }
+  if ($isAdministrator -and $env:GITHUB_ACTIONS -eq 'true') {
+    # D:\a can grant writes only through Administrators. Add the existing
+    # runner user's SID explicitly so the restricted child can write its checkout.
+    $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    & icacls.exe $repo /grant "*${userSid}:(OI)(CI)M" /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not grant the runner user access to its checkout' }
+  }
   $command = '$env:SI_VERSION=' + (Quote-Literal $env:SI_VERSION) + '; & ' + (Quote-Literal $PSCommandPath) + ' -Child -Stage ' + $Stage + ' -Receipt ' + (Quote-Literal $Receipt) + ' -NodeExecutable ' + (Quote-Literal $NodeExecutable)
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -30,10 +37,12 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
   $deadline = (Get-Date).AddMinutes(30)
   while (!(Test-Path -LiteralPath $Receipt)) {
     if ((Get-Date) -gt $deadline) { throw 'Ordinary-user validation timed out' }
-    if (!(Get-Process -Id $childPid -ErrorAction SilentlyContinue) -and !(Test-Path -LiteralPath $Receipt)) { throw 'Validation process exited without a receipt' }
+    $childExitCode = [SiWindowsCiToken]::ExitCode()
+    if ($childExitCode -ne 259 -and !(Test-Path -LiteralPath $Receipt)) { throw ('Validation process exited without a receipt: 0x{0:X8}' -f $childExitCode) }
     Start-Sleep -Seconds 1
   }
   $result = Get-Content -LiteralPath $Receipt -Raw | ConvertFrom-Json
+  [SiWindowsCiToken]::Close()
 } else {
   $code = 1
   try {
