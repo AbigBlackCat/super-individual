@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
 import { assertWindowsVcRuntimeLoaded } from './windows-vc-runtime.mjs';
 import { copyWindowsDirectory } from './windows-copy.mjs';
-import { _electron, expect } from '@playwright/test';
+import { _electron, expect as baseExpect } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 if (process.platform !== 'win32') throw new Error('This test must run on Windows');
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const sourceApp = path.resolve(process.env.SI_TEST_APP_DIRECTORY || path.join(repo, 'desktop/out/super individual-win32-x64'));
@@ -39,9 +40,11 @@ const env = validationEnvironment(home, {PATH:[temp,path.join(process.env.System
 const connectionFile = path.join(home, 'mcp/connection.json');
 const processes=[];
 let desktopApp;
+const rendererErrors=[];
 async function start() {
  desktopApp=await _electron.launch({executablePath:executable,cwd:temp,env,timeout:180000});
  processes.push(desktopApp.process());
+ (await desktopApp.firstWindow()).on('pageerror',error=>{rendererErrors.push(redactValidationLog(error.message));});
  // Capture the real tray object before the asynchronous backend startup completes.
  await desktopApp.evaluate(({Tray}) => {
    const original=Tray.prototype.on;
@@ -80,6 +83,7 @@ try {
  const postgresPid=Number((await fs.readFile(path.join(home,'instances/default/db/postmaster.pid'),'utf8')).split('\n')[0]);
  await assertWindowsVcRuntimeLoaded(postgresPid,path.join(payload,'server/node_modules/@embedded-postgres/windows-x64/native/bin'));
  let page=await desktopApp.firstWindow();
+ await page.waitForURL(url=>url.origin===c.origin,{timeout:30000,waitUntil:'domcontentloaded'});
  await expect(page.getByRole('heading',{name:'创建你的个人工作区'})).toBeVisible();
  assert.equal(await page.evaluate(()=>window.superIndividual.runtimeStatus().then(value=>value.dataDirectory)),home);
  const engines=await api(c,'/individual/engines?refresh=true');assert.ok(engines.every(e=>e.available&&e.loggedIn),JSON.stringify(engines));
@@ -153,6 +157,7 @@ try {
  await fs.writeFile('desktop/validation/windows-smoke.json',JSON.stringify({passed:true,platform:process.platform,arch:process.arch,firstStartupSeconds,restartStartupSeconds,vcRuntimeAppLocal:true,checks:['relocated packaged startup with restricted PATH','app-local Microsoft VC runtime loaded','fresh PostgreSQL','production UI rendered','UI workspace/task creation and editing','Windows cmd CLI discovery','MCP read/create/result','idempotent writes','human approval and acceptance gates','UI and database restart persistence','port conflict','single instance','window close hides and tray click restores','active task paused and saved on exit without automatic resume','graceful exit and capability revocation'],cliFixture:true,realProviderCredentialsUsed:false},null,2));
  console.log('Windows packaged application smoke test passed');
 } catch(error) {
+ if(rendererErrors.length)console.error('Renderer errors:',rendererErrors.slice(-20).join('\n'));
  const log=redactValidationLog(await fs.readFile(path.join(home,'logs/desktop-backend.log'),'utf8').catch(()=> 'No backend log'));
  await fs.writeFile('desktop/validation/windows-smoke-backend.log',log);console.error(log.slice(-10000));throw error;
 } finally {await client?.close();for(const p of processes)if(p.exitCode===null)spawn('taskkill.exe',['/PID',String(p.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});}
