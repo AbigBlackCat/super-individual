@@ -19,6 +19,7 @@ public static class SiWindowsCiToken {
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] static extern IntPtr GetProcessWindowStation();
     [DllImport("user32.dll")] static extern IntPtr GetThreadDesktop(uint thread);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool GetUserObjectInformation(IntPtr handle, int kind, StringBuilder value, uint size, out uint needed);
     [DllImport("user32.dll", SetLastError = true)] static extern bool GetUserObjectSecurity(IntPtr handle, ref uint information, byte[] descriptor, uint size, out uint needed);
     [DllImport("user32.dll", SetLastError = true)] static extern bool SetUserObjectSecurity(IntPtr handle, ref uint information, byte[] descriptor);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
@@ -34,6 +35,10 @@ public static class SiWindowsCiToken {
     static IntPtr Sid(string text) {
         var sid = new SecurityIdentifier(text); var bytes = new byte[sid.BinaryLength]; sid.GetBinaryForm(bytes, 0);
         var memory = Marshal.AllocHGlobal(bytes.Length); Marshal.Copy(bytes, 0, memory, bytes.Length); return memory;
+    }
+    static string ObjectName(IntPtr handle) {
+        uint needed; var name = new StringBuilder(256);
+        Check(GetUserObjectInformation(handle, 2, name, 512, out needed), "GetUserObjectInformation"); return name.ToString();
     }
     public static void GrantDesktopAccess() {
         // Hosted runners can grant their interactive desktop only to Administrators.
@@ -51,8 +56,8 @@ public static class SiWindowsCiToken {
         }
     }
     public static uint Start(string executable, string arguments, string cwd) {
-        IntPtr original = IntPtr.Zero, token = IntPtr.Zero, owner = IntPtr.Zero, label = IntPtr.Zero;
-        var admins = Sid("S-1-5-32-544"); var powerUsers = Sid("S-1-5-32-547"); var medium = Sid("S-1-16-8192");
+        IntPtr original = IntPtr.Zero, token = IntPtr.Zero, owner = IntPtr.Zero, aclMemory = IntPtr.Zero, defaultDacl = IntPtr.Zero;
+        var admins = Sid("S-1-5-32-544"); var powerUsers = Sid("S-1-5-32-547");
         var user = Sid(WindowsIdentity.GetCurrent().User.Value);
         try {
             Check(OpenProcessToken(GetCurrentProcess(), 0xF01FF, out original), "OpenProcessToken");
@@ -60,17 +65,23 @@ public static class SiWindowsCiToken {
             Check(CreateRestrictedToken(original, 1, 2, disabled, 0, IntPtr.Zero, 0, IntPtr.Zero, out token), "CreateRestrictedToken");
             owner = Marshal.AllocHGlobal(IntPtr.Size); Marshal.WriteIntPtr(owner, user);
             Check(SetTokenInformation(token, 4, owner, IntPtr.Size), "SetTokenOwner");
-            var integrity = new SidAndAttributes { Sid = medium, Attributes = 0x20 };
-            int labelSize = Marshal.SizeOf(typeof(SidAndAttributes)); label = Marshal.AllocHGlobal(labelSize);
-            Marshal.StructureToPtr(integrity, label, false);
-            Check(SetTokenInformation(token, 25, label, labelSize + 12), "SetTokenIntegrityLevel");
-            var startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)), flags = 1, showWindow = 0 };
+            var acl = new DiscretionaryAcl(false, false, 2);
+            acl.AddAccess(AccessControlType.Allow, WindowsIdentity.GetCurrent().User, 0x10000000, InheritanceFlags.None, PropagationFlags.None);
+            acl.AddAccess(AccessControlType.Allow, new SecurityIdentifier("S-1-5-18"), 0x10000000, InheritanceFlags.None, PropagationFlags.None);
+            var aclBytes = new byte[acl.BinaryLength]; acl.GetBinaryForm(aclBytes, 0);
+            aclMemory = Marshal.AllocHGlobal(aclBytes.Length); Marshal.Copy(aclBytes, 0, aclMemory, aclBytes.Length);
+            defaultDacl = Marshal.AllocHGlobal(IntPtr.Size); Marshal.WriteIntPtr(defaultDacl, aclMemory);
+            Check(SetTokenInformation(token, 6, defaultDacl, IntPtr.Size), "SetTokenDefaultDacl");
+            // Preserve the runner desktop's integrity level. Its administrator
+            // groups and privileges are still disabled and verified by the child.
+            var startup = new StartupInfo { cb = Marshal.SizeOf(typeof(StartupInfo)), flags = 1, showWindow = 0,
+                desktop = ObjectName(GetProcessWindowStation()) + "\\" + ObjectName(GetThreadDesktop(GetCurrentThreadId())) };
             ProcessInfo process;
             Check(CreateProcessAsUser(token, executable, new StringBuilder("\"" + executable + "\" " + arguments), IntPtr.Zero, IntPtr.Zero, false, 0x08000000, IntPtr.Zero, cwd, ref startup, out process), "CreateProcessAsUser");
             CloseHandle(process.thread); validationProcess = process.process; return process.pid;
         } finally {
             if (token != IntPtr.Zero) CloseHandle(token); if (original != IntPtr.Zero) CloseHandle(original);
-            foreach (var memory in new[] { admins, powerUsers, medium, user, owner, label }) if (memory != IntPtr.Zero) Marshal.FreeHGlobal(memory);
+            foreach (var memory in new[] { admins, powerUsers, user, owner, aclMemory, defaultDacl }) if (memory != IntPtr.Zero) Marshal.FreeHGlobal(memory);
         }
     }
 }
