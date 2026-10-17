@@ -65,10 +65,13 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
       $arguments = '"' + (Join-Path $PSScriptRoot $script) + '"'
     }
     $process = Start-Process -FilePath $NodeExecutable -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    $null = $process.Handle
     # Start-Process -Wait also waits for detached descendants. The Node checker
     # owns backend cleanup; preserve its result and wait for that process only.
     $process.WaitForExit()
-    $code = $process.ExitCode
+    $process.Refresh()
+    if ($null -eq $process.ExitCode) { throw 'Checker exit code was not available' }
+    $code = [int]$process.ExitCode
   } catch {
     $_ | Out-String | Set-Content -LiteralPath $stderr -Encoding UTF8
   } finally {
@@ -79,4 +82,5 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
 }
 Write-NewValidationLogs
 if ($result.administrator) { throw 'Expected an ordinary-user token' }
+if ($null -eq $result.exitCode) { throw 'Validation did not report an exit code' }
 exit $result.exitCode
