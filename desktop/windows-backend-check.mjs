@@ -49,7 +49,7 @@ export async function checkWindowsBackend(payload) {
     console.error(redactValidationLog(output).slice(-40000)); throw error;
   } finally {
     if (child.connected) child.send({ type: 'si:shutdown' });
-    await Promise.race([exited, sleep(15000)]);
+    await Promise.race([exited, sleep(45000)]);
     if (child.pid && child.exitCode === null && !launchError) execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true });
     await Promise.race([closed, sleep(3000)]);
     await fs.writeFile(path.join(diagnostics, 'windows-smoke-production-backend.log'), redactValidationLog(output));

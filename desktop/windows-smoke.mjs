@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { validationEnvironment, redactValidationLog } from './validation-runtime.mjs';
 import { assertWindowsVcRuntimeLoaded } from './windows-vc-runtime.mjs';
+import { copyWindowsDirectory } from './windows-copy.mjs';
 import { _electron, expect } from '@playwright/test';
 if (process.platform !== 'win32') throw new Error('This test must run on Windows');
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -18,7 +19,11 @@ const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'si-windows-smoke-'));
 const relativeSource = path.relative(repo, sourceApp);
 const alreadyRelocated = relativeSource.startsWith('..' + path.sep) || path.isAbsolute(relativeSource);
 const appDir = alreadyRelocated ? sourceApp : path.join(temp, '独立软件 super individual');
-if (!alreadyRelocated) await fs.cp(sourceApp, appDir, { recursive: true, dereference: true });
+if (!alreadyRelocated) {
+ console.log('Copying the complete portable application outside the checkout');
+ await copyWindowsDirectory(sourceApp, appDir);
+ console.log('Relocated application copy is complete');
+}
 const executable = path.join(appDir, 'super individual.exe');
 const payload = path.join(appDir, 'resources/payload');
 const require = createRequire(path.join(payload, 'server/package.json'));
@@ -54,8 +59,12 @@ async function connection() {
 }
 async function api(c,route,body) {const r=await fetch(c.origin+'/api'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Origin:c.origin},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const v=await r.json();assert.ok(r.ok,JSON.stringify(v));return v;}
 async function quit() {
+ const postgresPid=Number((await fs.readFile(path.join(home,'instances/default/db/postmaster.pid'),'utf8')).split('\n')[0]);
  const p=spawn(executable,['--quit'],{cwd:temp,env,stdio:'ignore'});await new Promise(r=>p.once('exit',r));
- for(let i=0;i<30;i++){try{await fs.access(connectionFile);}catch{return;}await sleep(1000);}throw new Error('Desktop did not stop and revoke its capability');
+ for(let i=0;i<60;i++){try{await fs.access(connectionFile);}catch{
+   let stopped=false;for(let j=0;j<10;j++){try{process.kill(postgresPid,0);}catch(error){if(error.code==='ESRCH'){stopped=true;break;}throw error;}await sleep(500);}
+   assert.ok(stopped,'Owned PostgreSQL remained alive after desktop exit');return;
+ }await sleep(1000);}throw new Error('Desktop did not stop and revoke its capability');
 }
 async function tool(client,name,args={}){const v=await client.callTool({name,arguments:args});assert.ok(!v.isError,JSON.stringify(v));return JSON.parse(v.content[0].text);}
 async function planReady(c,route) {

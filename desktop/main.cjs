@@ -109,7 +109,7 @@ function quitSafely() {
         const paused = await fetch(origin + '/api/individual/pause-all', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: '{}' }); if (!paused.ok) throw new Error('无法保存运行状态，请稍后再试');
       }
       quitting = true;
-      if (backend && backend.exitCode === null) { stopBackend(); await Promise.race([new Promise(resolve => backend.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, 15000))]); if (backend.exitCode === null) { if (process.platform === 'win32') execFileSync('taskkill.exe', ['/PID', String(backend.pid), '/T', '/F'], { windowsHide: true }); else process.kill(-backend.pid, 'SIGKILL'); } }
+      if (backend && backend.exitCode === null) { stopBackend(); await Promise.race([new Promise(resolve => backend.once('exit', resolve)), new Promise(resolve => setTimeout(resolve, process.platform === 'win32' ? 45000 : 15000))]); if (backend.exitCode === null) { if (process.platform === 'win32') execFileSync('taskkill.exe', ['/PID', String(backend.pid), '/T', '/F'], { windowsHide: true }); else process.kill(-backend.pid, 'SIGKILL'); } }
       tray?.destroy(); app.quit();
     } catch (error) { await dialog.showMessageBox({ type: 'error', message: '退出未完成', detail: String(error), buttons: ['返回工作台'] }); }
   })().finally(() => { quittingPromise = null; });

@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { packager } from '@electron/packager';
 import { checkWindowsBackend } from './windows-backend-check.mjs';
 import { bundleWindowsVcRuntime } from './windows-vc-runtime.mjs';
+import { prepareWindowsPostgresRuntime } from './windows-postgres-patch.mjs';
+import { checkWindowsPostgresRestart } from './windows-postgres-check.mjs';
+import { copyWindowsDirectory } from './windows-copy.mjs';
 if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Build this package on Windows x64 so its PostgreSQL and native Node modules match');
 if (Number(process.versions.node.split('.')[0]) !== 24) throw new Error('Use Node 24 for the packaged backend');
 const desktop = path.dirname(fileURLToPath(import.meta.url));
@@ -52,28 +55,18 @@ for (const file of ['node_modules/.modules.yaml', 'node_modules/.pnpm/lock.yaml'
 // Use a per-user ASCII junction for PostgreSQL's Windows executable paths.
 // Its initdb subprocess otherwise sends ACP-encoded library paths to a UTF-8
 // database when the portable folder contains Chinese characters.
-const postgresModule = path.join(payload, 'server/node_modules/@embedded-postgres/windows-x64/dist/index.js');
-await fs.writeFile(postgresModule + '.staged', `import path from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst native = process.env.SI_POSTGRES_NATIVE_DIRECTORY || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../native');\nexport const pg_ctl = path.join(native, 'bin/pg_ctl.exe');\nexport const initdb = path.join(native, 'bin/initdb.exe');\nexport const postgres = path.join(native, 'bin/postgres.exe');\n`);
-await fs.rename(postgresModule + '.staged', postgresModule);
-// embedded-postgres forwards initdb stdout but omits stderr, hiding the actual
-// initialization failure. Patch only the shipped copy, keeping store hardlinks intact.
-const postgresRuntime = path.join(payload, 'server/node_modules/embedded-postgres/dist/index.js');
-let postgresCode = await fs.readFile(postgresRuntime, 'utf8');
-if (!postgresCode.includes('si: initdb diagnostics')) {
-  const marker = "                process.on('exit', (code) => {";
-  if (!postgresCode.includes(marker)) throw new Error('Unsupported embedded-postgres diagnostics layout');
-  postgresCode = postgresCode.replace(marker, "                // si: initdb diagnostics\n                process.stderr?.on('data', chunk => this.options.onError(chunk.toString('utf-8')));\n                process.once('error', reject);\n" + marker);
-  await fs.writeFile(postgresRuntime + '.staged', postgresCode);
-  await fs.rename(postgresRuntime + '.staged', postgresRuntime);
-}
+await prepareWindowsPostgresRuntime(payload);
 const postgresBin = path.join(payload, 'server/node_modules/@embedded-postgres/windows-x64/native/bin');
 const vcRuntime = await bundleWindowsVcRuntime([path.join(payload, 'bin'), postgresBin]);
+await checkWindowsPostgresRestart(payload);
 await checkWindowsBackend(payload);
 for (const name of ['main.cjs', 'preload.cjs', 'runtime.mjs']) await fs.copyFile(path.join(desktop, name), path.join(staging, name));
 await fs.writeFile(path.join(staging, 'package.json'), JSON.stringify({ name: 'super-individual', productName: 'super individual', version, main: 'main.cjs', license: 'MIT', author: 'super individual contributors' }));
 const cachedElectron = path.join(desktop, 'electron-cache/electron-v44.9.0-win32-x64.zip');
 const hasCachedElectron = await fs.access(cachedElectron).then(() => true, () => false);
-const outputs = await packager({ dir: staging, name: 'super individual', executableName: 'super individual', platform: 'win32', arch: 'x64', electronVersion: '44.9.0', ...(hasCachedElectron ? { electronZipDir: path.dirname(cachedElectron) } : {}), out: path.join(desktop, 'out'), overwrite: true, prune: false, asar: false, icon: path.join(desktop, 'app.ico'), extraResource: [payload], win32metadata: { ProductName: 'super individual', FileDescription: 'Personal task and agent collaboration board', CompanyName: 'super individual contributors' }, appCopyright: 'Based on Paperclip (MIT). Original attribution retained.' });
+const outputs = await packager({ dir: staging, name: 'super individual', executableName: 'super individual', platform: 'win32', arch: 'x64', electronVersion: '44.9.0', ...(hasCachedElectron ? { electronZipDir: path.dirname(cachedElectron) } : {}), out: path.join(desktop, 'out'), overwrite: true, prune: false, asar: false, icon: path.join(desktop, 'app.ico'), win32metadata: { ProductName: 'super individual', FileDescription: 'Personal task and agent collaboration board', CompanyName: 'super individual contributors' }, appCopyright: 'Based on Paperclip (MIT). Original attribution retained.' });
+console.log('Copying the production runtime into the portable application');
+await copyWindowsDirectory(payload, path.join(outputs[0], 'resources/payload'));
 await fs.copyFile(path.join(root, 'LICENSE'), path.join(outputs[0], 'LICENSE-Paperclip.txt'));
 for (const {name} of vcRuntime) await fs.copyFile(path.join(payload, 'bin', name), path.join(outputs[0], name));
 await fs.copyFile(path.join(desktop, 'LICENSE-Microsoft-VC-Runtime.txt'), path.join(outputs[0], 'LICENSE-Microsoft-VC-Runtime.txt'));
