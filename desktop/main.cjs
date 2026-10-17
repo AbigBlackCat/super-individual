@@ -49,13 +49,20 @@ async function start() {
   });
   fs.closeSync(log);
   let launchError;
+  let announcedReady = false;
+  backend.on('message', message => {
+    if (message?.type === 'si:ready' && Number.isInteger(message.port) && message.port > 0 && message.port < 65536) {
+      origin = `http://127.0.0.1:${message.port}`;
+      announcedReady = true;
+    }
+  });
   backend.once('error', error => { launchError = error; });
   backend.once('exit', (code, signal) => { if (!quitting && backendReady) { void dialog.showMessageBox({ type: 'error', title: '本机服务已停止', message: 'super individual 的本机服务意外停止。', detail: `退出状态：${code ?? signal}。重新打开应用可恢复，数据保留在本机。`, buttons: ['退出应用'] }).then(() => { quitting = true; app.quit(); }); } });
   const deadline = Date.now() + (process.platform === 'win32' ? 300000 : 120000);
   let ready = false;
   while (Date.now() < deadline) {
     if (launchError) throw new Error('无法启动包内 Node：' + launchError.message, { cause: launchError });
-    if (await runtime.isDesktopBackendReady(origin, mcpToken)) { ready = true; break; }
+    if (announcedReady && await runtime.isDesktopBackendReady(origin, mcpToken)) { ready = true; break; }
     if (backend.exitCode !== null) throw new Error('本机服务启动失败，请查看：' + path.join(dataDirectory, 'logs/desktop-backend.log'));
     await new Promise(resolve => setTimeout(resolve, 500));
   }

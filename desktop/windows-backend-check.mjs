@@ -24,6 +24,10 @@ export async function checkWindowsBackend(payload) {
   const record = chunk => { output += chunk.toString(); };
   child.stdout.on('data', record); child.stderr.on('data', record);
   let launchError;
+  let readyOrigin;
+  child.on('message', message => {
+    if (message?.type === 'si:ready' && Number.isInteger(message.port) && message.port > 0 && message.port < 65536) readyOrigin = `http://127.0.0.1:${message.port}`;
+  });
   child.once('error', error => { launchError = error; output += error.stack ?? String(error); });
   const exited = new Promise(resolve => { child.once('exit', resolve); child.once('error', resolve); });
   const closed = new Promise(resolve => child.once('close', resolve));
@@ -32,7 +36,7 @@ export async function checkWindowsBackend(payload) {
     for (let i = 0; i < 300; i++) {
       if (launchError) throw launchError;
       if (child.exitCode !== null) throw new Error(`Production backend exited: ${child.exitCode}`);
-      if (await isDesktopBackendReady(`http://127.0.0.1:${port}`, token)) {
+      if (readyOrigin && await isDesktopBackendReady(readyOrigin, token)) {
         console.log(`Production Windows backend and PostgreSQL started successfully (${Math.round((Date.now() - startedAt) / 1000)}s)`); return;
       }
       await sleep(1000);

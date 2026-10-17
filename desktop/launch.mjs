@@ -50,6 +50,7 @@ process.env.PAPERCLIP_MIGRATION_AUTO_APPLY = 'true';
 console.info('[si] Loading production backend');
 const { startServer } = await import('./server/dist/index.js');
 console.info('[si] Starting local server and database');
-await startServer();
+const startedServer = await startServer();
 serverStarted = true;
+if (process.connected) process.send({ type: 'si:ready', port: startedServer.listenPort });
 if (shutdownRequested) shutdown();
