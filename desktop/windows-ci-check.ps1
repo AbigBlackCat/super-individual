@@ -20,7 +20,11 @@ $logOffsets = @{}
 function Write-NewValidationLogs {
   foreach ($log in @($stdout, $stderr)) {
     if (!(Test-Path -LiteralPath $log)) { continue }
-    try { $content = [IO.File]::ReadAllText($log, [Text.Encoding]::UTF8) } catch { continue }
+    try {
+      $stream = [IO.File]::Open($log, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+      $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8)
+      try { $content = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } catch { continue }
     $offset = if ($logOffsets.ContainsKey($log)) { $logOffsets[$log] } else { 0 }
     if ($content.Length -gt $offset) { Write-Host -NoNewline $content.Substring($offset); $logOffsets[$log] = $content.Length }
   }
@@ -34,8 +38,14 @@ if (!$Child -and ($isAdministrator -or $Restrict)) {
     # D:\a can grant writes only through Administrators. Add the existing
     # runner user's SID explicitly so the restricted child can write its checkout.
     $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    & icacls.exe $repo /grant "*${userSid}:(OI)(CI)M" /T /Q | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Could not grant the runner user access to its checkout' }
+    $accessMarker = Join-Path $diagnostics 'windows-ci-access.txt'
+    # The early probe runs before dependency installation. Later files inherit
+    # this grant; walking the installed workspace again is both slow and redundant.
+    if (!(Test-Path -LiteralPath $accessMarker) -or [IO.File]::ReadAllText($accessMarker).Trim() -ne $userSid) {
+      & icacls.exe $repo /grant "*${userSid}:(OI)(CI)M" /T /Q | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw 'Could not grant the runner user access to its checkout' }
+      [IO.File]::WriteAllText($accessMarker, $userSid)
+    }
   }
   $command = '$env:SI_VERSION=' + (Quote-Literal $env:SI_VERSION) + '; & ' + (Quote-Literal $PSCommandPath) + ' -Child -Stage ' + $Stage + ' -Receipt ' + (Quote-Literal $Receipt) + ' -NodeExecutable ' + (Quote-Literal $NodeExecutable)
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
